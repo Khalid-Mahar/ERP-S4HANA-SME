@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+:root {
+  --sidebar-width: 260px;
+  --header-height: 60px;
+  --color-primary: #4f46e5;
+  --color-primary-dark: #3730a3;
+  --color-primary-light: #eef2ff;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #0284c7;
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-border: #e2e8f0;
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+  --color-sidebar-bg: #1e293b;
+  --color-sidebar-text: #cbd5e1;
+  --color-sidebar-active: #4f46e5;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+@theme {
+  --color-primary: #4f46e5;
+  --color-primary-dark: #3730a3;
+  --color-primary-light: #eef2ff;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #0284c7;
+}
+
+@layer base {
+  body {
+    @apply bg-[#f8fafc] text-[#0f172a] font-sans antialiased;
+    font-size: 14px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white border border-[#e2e8f0] rounded-xl p-5 shadow-sm;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success { @apply bg-[#dcfce7] text-[#166534]; }
+  .badge-warning { @apply bg-[#fef3c7] text-[#92400e]; }
+  .badge-danger  { @apply bg-[#fee2e2] text-[#991b1b]; }
+  .badge-info    { @apply bg-[#dbeafe] text-[#1e40af]; }
+  .badge-default { @apply bg-[#f1f5f9] text-[#475569]; }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-primary { @apply bg-[#4f46e5] text-white hover:bg-[#3730a3] shadow-sm; }
+  .btn-secondary { @apply bg-white text-[#0f172a] border border-[#e2e8f0] hover:bg-gray-50; }
+  .btn-danger { @apply bg-[#dc2626] text-white hover:bg-[#b91c1c]; }
+  .btn-ghost { @apply text-[#64748b] hover:bg-gray-100; }
+
+  .form-input {
+    @apply w-full px-3 py-2 bg-white border border-[#e2e8f0] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4f46e5] focus:border-transparent transition-all;
+  }
+
+  /* Table styling to match old code */
+  .erp-table {
+    @apply w-full text-left text-[13px] border-collapse;
+  }
+  .erp-table thead {
+    @apply bg-[#f8fafc];
+  }
+  .erp-table th {
+    @apply px-4 py-3 text-[12px] font-semibold text-[#64748b] uppercase tracking-wider border-b border-[#e2e8f0];
+  }
+  .erp-table td {
+    @apply px-4 py-3 border-b border-[#f1f5f9] align-middle;
+  }
+  .erp-table tr:hover td {
+    @apply bg-[#fafbfc];
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }

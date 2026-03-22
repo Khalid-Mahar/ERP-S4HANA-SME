@@ -1,0 +1,331 @@
+{
+  "info": {
+    "name": "ERP System API",
+    "_postman_id": "erp-system-collection",
+    "description": "Complete API collection for ERP System. \n\n**Setup:** Set `baseUrl` to `http://localhost:3000/api/v1` and `token` will be auto-populated after login.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1" },
+    { "key": "token", "value": "" },
+    { "key": "companyCode", "value": "DEMO" }
+  ],
+  "item": [
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Register Company",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"companyName\": \"My Company\",\n  \"companyCode\": \"MYCO\",\n  \"email\": \"admin@mycompany.com\",\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"password\": \"Admin@1234\"\n}" }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": ["const r = pm.response.json();", "const d = r.data || r;", "if (d.accessToken) { pm.collectionVariables.set('token', d.accessToken); pm.collectionVariables.set('refreshToken', d.refreshToken); }"] }
+          }],
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@demo.com\",\n  \"password\": \"Admin@1234\",\n  \"companyCode\": \"DEMO\"\n}" }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET", "url": "{{baseUrl}}/auth/me",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "Create User (Admin)",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/auth/users",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"user@demo.com\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"User\",\n  \"password\": \"User@1234\",\n  \"role\": \"USER\"\n}" }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/auth/refresh",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"refreshToken\": \"{{refreshToken}}\" }" }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/auth/logout",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"refreshToken\": \"{{refreshToken}}\" }" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📦 Inventory",
+      "item": [
+        {
+          "name": "Create Item",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/inventory/items",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"TEST-001\",\n  \"name\": \"Test Product\",\n  \"category\": \"Electronics\",\n  \"uom\": \"PCS\",\n  \"costPrice\": 100.00,\n  \"salePrice\": 150.00,\n  \"minStockLevel\": 10\n}" }
+          }
+        },
+        {
+          "name": "List Items",
+          "request": {
+            "method": "GET", "url": "{{baseUrl}}/inventory/items?page=1&pageSize=20",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "Search Items",
+          "request": {
+            "method": "GET", "url": "{{baseUrl}}/inventory/items?search=laptop",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "Get Item by ID",
+          "request": {
+            "method": "GET", "url": "{{baseUrl}}/inventory/items/:id",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "Update Item",
+          "request": {
+            "method": "PUT", "url": "{{baseUrl}}/inventory/items/:id",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"salePrice\": 175.00,\n  \"minStockLevel\": 15\n}" }
+          }
+        },
+        {
+          "name": "Get Low Stock",
+          "request": {
+            "method": "GET", "url": "{{baseUrl}}/inventory/items/low-stock",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "Get Stock Levels",
+          "request": {
+            "method": "GET", "url": "{{baseUrl}}/inventory/stock",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        },
+        {
+          "name": "Adjust Stock",
+          "request": {
+            "method": "PATCH", "url": "{{baseUrl}}/inventory/items/:id/adjust-stock",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"quantity\": 100,\n  \"notes\": \"Manual stock count correction\"\n}" }
+          }
+        },
+        {
+          "name": "Record Stock Movement (IN)",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/inventory/movements",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"itemId\": \"{{itemId}}\",\n  \"toWarehouseId\": \"{{warehouseId}}\",\n  \"quantity\": 50,\n  \"movementType\": \"IN\",\n  \"notes\": \"Stock received\"\n}" }
+          }
+        },
+        {
+          "name": "Get Stock Movements",
+          "request": {
+            "method": "GET", "url": "{{baseUrl}}/inventory/movements?page=1&pageSize=20",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏭 Warehouses",
+      "item": [
+        {
+          "name": "Create Warehouse",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/warehouses",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"WH-002\",\n  \"name\": \"Secondary Warehouse\",\n  \"address\": \"456 Storage St\"\n}" }
+          }
+        },
+        { "name": "List Warehouses", "request": { "method": "GET", "url": "{{baseUrl}}/warehouses", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        {
+          "name": "Add Bin Location",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/warehouses/:id/bins",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"code\": \"D-01\", \"name\": \"Aisle D, Shelf 1\" }" }
+          }
+        },
+        {
+          "name": "Transfer Stock",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/warehouses/transfer",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"itemId\": \"{{itemId}}\",\n  \"fromWarehouseId\": \"{{fromWarehouseId}}\",\n  \"toWarehouseId\": \"{{toWarehouseId}}\",\n  \"quantity\": 20,\n  \"notes\": \"Transfer to east DC\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🛒 Sales",
+      "item": [
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/sales/customers",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"CUST-NEW\",\n  \"name\": \"New Customer Inc\",\n  \"email\": \"buyer@newcustomer.com\",\n  \"phone\": \"+1-555-9999\",\n  \"creditLimit\": 25000\n}" }
+          }
+        },
+        { "name": "List Customers", "request": { "method": "GET", "url": "{{baseUrl}}/sales/customers?page=1&pageSize=20", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        {
+          "name": "Create Sales Order",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/sales/orders",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"customerId\": \"{{customerId}}\",\n  \"deliveryDate\": \"2024-12-31\",\n  \"notes\": \"Urgent delivery\",\n  \"lines\": [\n    { \"itemId\": \"{{itemId}}\", \"quantity\": 5, \"unitPrice\": 1299.00, \"discount\": 5 },\n    { \"itemId\": \"{{itemId2}}\", \"quantity\": 10, \"unitPrice\": 49.00 }\n  ]\n}" }
+          }
+        },
+        { "name": "List Sales Orders", "request": { "method": "GET", "url": "{{baseUrl}}/sales/orders?page=1&pageSize=20", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        { "name": "Sales Summary", "request": { "method": "GET", "url": "{{baseUrl}}/sales/orders/summary", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        {
+          "name": "Update Order Status (CONFIRMED)",
+          "request": {
+            "method": "PATCH", "url": "{{baseUrl}}/sales/orders/:id/status",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"status\": \"CONFIRMED\" }" }
+          }
+        },
+        {
+          "name": "Ship Order (deducts inventory)",
+          "request": {
+            "method": "PATCH", "url": "{{baseUrl}}/sales/orders/:id/status?warehouseId={{warehouseId}}",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"status\": \"SHIPPED\" }" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🚚 Purchase",
+      "item": [
+        {
+          "name": "Create Vendor",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/purchase/vendors",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"VEND-NEW\",\n  \"name\": \"New Supplier Ltd\",\n  \"email\": \"sales@newsupplier.com\",\n  \"paymentTerms\": 30\n}" }
+          }
+        },
+        { "name": "List Vendors", "request": { "method": "GET", "url": "{{baseUrl}}/purchase/vendors", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        {
+          "name": "Create Purchase Order",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/purchase/orders",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"vendorId\": \"{{vendorId}}\",\n  \"expectedDate\": \"2024-12-15\",\n  \"lines\": [\n    { \"itemId\": \"{{itemId}}\", \"quantity\": 20, \"unitCost\": 850.00 }\n  ]\n}" }
+          }
+        },
+        { "name": "List Purchase Orders", "request": { "method": "GET", "url": "{{baseUrl}}/purchase/orders", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        {
+          "name": "Receive Goods (GRN)",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/purchase/orders/:id/receive",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"warehouseId\": \"{{warehouseId}}\",\n  \"notes\": \"All items received in good condition\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💰 Finance",
+      "item": [
+        { "name": "Get Chart of Accounts", "request": { "method": "GET", "url": "{{baseUrl}}/finance/accounts", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        {
+          "name": "Create Account",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/finance/accounts",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"code\": \"6500\",\n  \"name\": \"Travel Expenses\",\n  \"type\": \"EXPENSE\"\n}" }
+          }
+        },
+        {
+          "name": "Create Transaction (Double-Entry)",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/finance/transactions",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"transactionDate\": \"2024-01-15\",\n  \"description\": \"Office supplies purchase\",\n  \"lines\": [\n    { \"debitAccountId\": \"{{expenseAccountId}}\", \"amount\": 500, \"description\": \"Debit office supplies\" },\n    { \"creditAccountId\": \"{{cashAccountId}}\", \"amount\": 500, \"description\": \"Credit cash\" }\n  ]\n}" }
+          }
+        },
+        { "name": "List Transactions", "request": { "method": "GET", "url": "{{baseUrl}}/finance/transactions?page=1&pageSize=20", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        { "name": "Income Statement", "request": { "method": "GET", "url": "{{baseUrl}}/finance/reports/income-statement?startDate=2024-01-01&endDate=2024-12-31", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        { "name": "Trial Balance", "request": { "method": "GET", "url": "{{baseUrl}}/finance/reports/trial-balance", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } }
+      ]
+    },
+    {
+      "name": "👥 HR",
+      "item": [
+        {
+          "name": "Create Employee",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/hr/employees",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"employeeId\": \"EMP-010\",\n  \"firstName\": \"Mark\",\n  \"lastName\": \"Turner\",\n  \"email\": \"mark@demo.com\",\n  \"department\": \"Sales\",\n  \"position\": \"Sales Rep\",\n  \"hireDate\": \"2024-01-01\",\n  \"salary\": 55000\n}" }
+          }
+        },
+        { "name": "List Employees", "request": { "method": "GET", "url": "{{baseUrl}}/hr/employees", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        { "name": "Department Summary", "request": { "method": "GET", "url": "{{baseUrl}}/hr/employees/departments", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        {
+          "name": "Record Attendance",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/hr/employees/:id/attendance",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"date\": \"2024-01-15\",\n  \"checkIn\": \"09:00:00\",\n  \"checkOut\": \"17:30:00\",\n  \"status\": \"PRESENT\"\n}" }
+          }
+        },
+        { "name": "Attendance Report", "request": { "method": "GET", "url": "{{baseUrl}}/hr/attendance/report?month=1&year=2024", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } }
+      ]
+    },
+    {
+      "name": "🎯 CRM",
+      "item": [
+        {
+          "name": "Create Lead",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/crm/leads",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Alex Morgan\",\n  \"email\": \"alex@prospect.com\",\n  \"company\": \"Prospect Corp\",\n  \"source\": \"Website\",\n  \"status\": \"NEW\",\n  \"value\": 30000\n}" }
+          }
+        },
+        { "name": "List Leads", "request": { "method": "GET", "url": "{{baseUrl}}/crm/leads?page=1&pageSize=20", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        { "name": "Pipeline View", "request": { "method": "GET", "url": "{{baseUrl}}/crm/leads/pipeline", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }] } },
+        {
+          "name": "Update Lead Status",
+          "request": {
+            "method": "PUT", "url": "{{baseUrl}}/crm/leads/:id",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"status\": \"QUALIFIED\", \"notes\": \"Good fit, needs follow-up\" }" }
+          }
+        },
+        {
+          "name": "Log Interaction",
+          "request": {
+            "method": "POST", "url": "{{baseUrl}}/crm/interactions",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"leadId\": \"{{leadId}}\",\n  \"type\": \"CALL\",\n  \"subject\": \"Initial discovery call\",\n  \"notes\": \"Discussed requirements and budget. Interested in enterprise plan.\"\n}" }
+          }
+        }
+      ]
+    }
+  ]
+}

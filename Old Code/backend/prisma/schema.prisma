@@ -1,0 +1,557 @@
+// ============================================================
+// ERP System - Prisma Schema
+// Architecture: Modular Monolith (Microservices-ready)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// CORE: Multi-Company & User Management
+// ============================================================
+
+model Company {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  email       String?
+  phone       String?
+  address     String?
+  currency    String   @default("USD")
+  timezone    String   @default("UTC")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users         User[]
+  warehouses    Warehouse[]
+  items         Item[]
+  customers     Customer[]
+  vendors       Vendor[]
+  salesOrders   SalesOrder[]
+  purchaseOrders PurchaseOrder[]
+  accounts      Account[]
+  employees     Employee[]
+  leads         Lead[]
+
+  @@map("companies")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  companyId   String
+  email       String
+  password    String
+  firstName   String
+  lastName    String
+  role        UserRole @default(USER)
+  isActive    Boolean  @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id])
+  refreshTokens RefreshToken[]
+  auditLogs   AuditLog[]
+
+  @@unique([companyId, email])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  action     String
+  entity     String
+  entityId   String
+  oldValues  Json?
+  newValues  Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// ============================================================
+// INVENTORY MODULE
+// ============================================================
+
+model Item {
+  id            String      @id @default(uuid())
+  companyId     String
+  code          String
+  name          String
+  description   String?
+  category      String?
+  uom           String      @default("PCS")  // Unit of Measure
+  costPrice     Decimal     @default(0) @db.Decimal(12,2)
+  salePrice     Decimal     @default(0) @db.Decimal(12,2)
+  minStockLevel Int         @default(0)
+  maxStockLevel Int?
+  isActive      Boolean     @default(true)
+  imageUrl      String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  company       Company     @relation(fields: [companyId], references: [id])
+  stockLevels   StockLevel[]
+  stockMovements StockMovement[]
+  salesOrderLines SalesOrderLine[]
+  purchaseOrderLines PurchaseOrderLine[]
+
+  @@unique([companyId, code])
+  @@map("items")
+}
+
+model Warehouse {
+  id          String   @id @default(uuid())
+  companyId   String
+  code        String
+  name        String
+  address     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id])
+  bins        BinLocation[]
+  stockLevels StockLevel[]
+  stockMovementsFrom StockMovement[] @relation("FromWarehouse")
+  stockMovementsTo   StockMovement[] @relation("ToWarehouse")
+
+  @@unique([companyId, code])
+  @@map("warehouses")
+}
+
+model BinLocation {
+  id          String   @id @default(uuid())
+  warehouseId String
+  code        String
+  name        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  stockLevels StockLevel[]
+
+  @@unique([warehouseId, code])
+  @@map("bin_locations")
+}
+
+model StockLevel {
+  id            String      @id @default(uuid())
+  itemId        String
+  warehouseId   String
+  binLocationId String?
+  quantity      Decimal     @default(0) @db.Decimal(12,4)
+  reservedQty   Decimal     @default(0) @db.Decimal(12,4)
+  updatedAt     DateTime    @updatedAt
+
+  item          Item        @relation(fields: [itemId], references: [id])
+  warehouse     Warehouse   @relation(fields: [warehouseId], references: [id])
+  binLocation   BinLocation? @relation(fields: [binLocationId], references: [id])
+
+  @@unique([itemId, warehouseId, binLocationId])
+  @@map("stock_levels")
+}
+
+model StockMovement {
+  id              String         @id @default(uuid())
+  itemId          String
+  fromWarehouseId String?
+  toWarehouseId   String?
+  quantity        Decimal        @db.Decimal(12,4)
+  movementType    MovementType
+  referenceType   String?        // 'SALES_ORDER' | 'PURCHASE_ORDER' | 'TRANSFER' | 'ADJUSTMENT'
+  referenceId     String?
+  notes           String?
+  createdAt       DateTime       @default(now())
+
+  item            Item           @relation(fields: [itemId], references: [id])
+  fromWarehouse   Warehouse?     @relation("FromWarehouse", fields: [fromWarehouseId], references: [id])
+  toWarehouse     Warehouse?     @relation("ToWarehouse", fields: [toWarehouseId], references: [id])
+
+  @@map("stock_movements")
+}
+
+// ============================================================
+// SALES MODULE
+// ============================================================
+
+model Customer {
+  id          String   @id @default(uuid())
+  companyId   String
+  code        String
+  name        String
+  email       String?
+  phone       String?
+  address     String?
+  taxId       String?
+  creditLimit Decimal  @default(0) @db.Decimal(12,2)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company  @relation(fields: [companyId], references: [id])
+  salesOrders SalesOrder[]
+  interactions CustomerInteraction[]
+
+  @@unique([companyId, code])
+  @@map("customers")
+}
+
+model SalesOrder {
+  id            String          @id @default(uuid())
+  companyId     String
+  customerId    String
+  orderNumber   String
+  status        SalesOrderStatus @default(DRAFT)
+  orderDate     DateTime        @default(now())
+  deliveryDate  DateTime?
+  subtotal      Decimal         @default(0) @db.Decimal(12,2)
+  taxAmount     Decimal         @default(0) @db.Decimal(12,2)
+  totalAmount   Decimal         @default(0) @db.Decimal(12,2)
+  notes         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  company       Company         @relation(fields: [companyId], references: [id])
+  customer      Customer        @relation(fields: [customerId], references: [id])
+  lines         SalesOrderLine[]
+  transactions  Transaction[]
+
+  @@unique([companyId, orderNumber])
+  @@map("sales_orders")
+}
+
+model SalesOrderLine {
+  id           String     @id @default(uuid())
+  salesOrderId String
+  itemId       String
+  quantity     Decimal    @db.Decimal(12,4)
+  unitPrice    Decimal    @db.Decimal(12,2)
+  discount     Decimal    @default(0) @db.Decimal(5,2)
+  lineTotal    Decimal    @db.Decimal(12,2)
+
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  item         Item       @relation(fields: [itemId], references: [id])
+
+  @@map("sales_order_lines")
+}
+
+// ============================================================
+// PURCHASE MODULE
+// ============================================================
+
+model Vendor {
+  id          String   @id @default(uuid())
+  companyId   String
+  code        String
+  name        String
+  email       String?
+  phone       String?
+  address     String?
+  taxId       String?
+  paymentTerms Int     @default(30)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company         Company         @relation(fields: [companyId], references: [id])
+  purchaseOrders  PurchaseOrder[]
+
+  @@unique([companyId, code])
+  @@map("vendors")
+}
+
+model PurchaseOrder {
+  id           String              @id @default(uuid())
+  companyId    String
+  vendorId     String
+  orderNumber  String
+  status       PurchaseOrderStatus @default(DRAFT)
+  orderDate    DateTime            @default(now())
+  expectedDate DateTime?
+  subtotal     Decimal             @default(0) @db.Decimal(12,2)
+  taxAmount    Decimal             @default(0) @db.Decimal(12,2)
+  totalAmount  Decimal             @default(0) @db.Decimal(12,2)
+  notes        String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  company      Company             @relation(fields: [companyId], references: [id])
+  vendor       Vendor              @relation(fields: [vendorId], references: [id])
+  lines        PurchaseOrderLine[]
+  grns         GoodsReceipt[]
+  transactions Transaction[]
+
+  @@unique([companyId, orderNumber])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  itemId          String
+  quantity        Decimal       @db.Decimal(12,4)
+  unitCost        Decimal       @db.Decimal(12,2)
+  receivedQty     Decimal       @default(0) @db.Decimal(12,4)
+  lineTotal       Decimal       @db.Decimal(12,2)
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  item            Item          @relation(fields: [itemId], references: [id])
+
+  @@map("purchase_order_lines")
+}
+
+model GoodsReceipt {
+  id              String        @id @default(uuid())
+  purchaseOrderId String
+  grnNumber       String        @unique
+  receivedDate    DateTime      @default(now())
+  warehouseId     String?
+  notes           String?
+  createdAt       DateTime      @default(now())
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+
+  @@map("goods_receipts")
+}
+
+// ============================================================
+// FINANCE MODULE
+// ============================================================
+
+model Account {
+  id          String      @id @default(uuid())
+  companyId   String
+  code        String
+  name        String
+  type        AccountType
+  parentId    String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+
+  company     Company     @relation(fields: [companyId], references: [id])
+  parent      Account?    @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children    Account[]   @relation("AccountHierarchy")
+  debitLines  TransactionLine[] @relation("DebitAccount")
+  creditLines TransactionLine[] @relation("CreditAccount")
+
+  @@unique([companyId, code])
+  @@map("accounts")
+}
+
+model Transaction {
+  id              String    @id @default(uuid())
+  companyId       String
+  transactionDate DateTime  @default(now())
+  referenceType   String?
+  referenceId     String?
+  salesOrderId    String?
+  purchaseOrderId String?
+  description     String
+  totalAmount     Decimal   @db.Decimal(12,2)
+  createdAt       DateTime  @default(now())
+
+  salesOrder      SalesOrder?    @relation(fields: [salesOrderId], references: [id])
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  lines           TransactionLine[]
+
+  @@map("transactions")
+}
+
+model TransactionLine {
+  id            String      @id @default(uuid())
+  transactionId String
+  debitAccountId  String?
+  creditAccountId String?
+  amount        Decimal     @db.Decimal(12,2)
+  description   String?
+
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  debitAccount  Account?    @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  creditAccount Account?    @relation("CreditAccount", fields: [creditAccountId], references: [id])
+
+  @@map("transaction_lines")
+}
+
+// ============================================================
+// HR MODULE
+// ============================================================
+
+model Employee {
+  id          String          @id @default(uuid())
+  companyId   String
+  employeeId  String
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String?
+  department  String?
+  position    String?
+  hireDate    DateTime
+  status      EmployeeStatus  @default(ACTIVE)
+  salary      Decimal?        @db.Decimal(12,2)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  company     Company         @relation(fields: [companyId], references: [id])
+  attendance  Attendance[]
+
+  @@unique([companyId, employeeId])
+  @@map("employees")
+}
+
+model Attendance {
+  id          String    @id @default(uuid())
+  employeeId  String
+  date        DateTime  @db.Date
+  checkIn     DateTime?
+  checkOut    DateTime?
+  status      AttendanceStatus @default(PRESENT)
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, date])
+  @@map("attendance")
+}
+
+// ============================================================
+// CRM MODULE
+// ============================================================
+
+model Lead {
+  id          String     @id @default(uuid())
+  companyId   String
+  name        String
+  email       String?
+  phone       String?
+  company     String?
+  source      String?
+  status      LeadStatus @default(NEW)
+  value       Decimal?   @db.Decimal(12,2)
+  notes       String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  companyRel  Company    @relation(fields: [companyId], references: [id])
+  interactions CustomerInteraction[]
+
+  @@map("leads")
+}
+
+model CustomerInteraction {
+  id          String            @id @default(uuid())
+  customerId  String?
+  leadId      String?
+  type        InteractionType
+  subject     String
+  notes       String?
+  date        DateTime          @default(now())
+  createdAt   DateTime          @default(now())
+
+  customer    Customer?         @relation(fields: [customerId], references: [id])
+  lead        Lead?             @relation(fields: [leadId], references: [id])
+
+  @@map("customer_interactions")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  USER
+}
+
+enum MovementType {
+  IN
+  OUT
+  TRANSFER
+  ADJUSTMENT
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  PICKING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  CONFIRMED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LEAVE
+  HOLIDAY
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum InteractionType {
+  CALL
+  EMAIL
+  MEETING
+  NOTE
+  DEMO
+}

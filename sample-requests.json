@@ -1,0 +1,69 @@
+{
+  "info": {
+    "name": "ERP S/4HANA SME API",
+    "schema": "https://schema.getpostman.com/json/collection/2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@company.com\",\n  \"password\": \"password123\",\n  \"firstName\": \"Admin\",\n  \"lastName\": \"User\",\n  \"companyName\": \"Global ERP Corp\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "http://localhost:3000/auth/register"
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@company.com\",\n  \"password\": \"password123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "http://localhost:3000/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "item": [
+        {
+          "name": "Get All Items",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": "http://localhost:3000/inventory"
+          }
+        },
+        {
+          "name": "Create Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"PROD-001\",\n  \"name\": \"Wireless Mouse\",\n  \"description\": \"High performance mouse\",\n  \"price\": 29.99\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "http://localhost:3000/inventory"
+          }
+        }
+      ]
+    }
+  ]
+}

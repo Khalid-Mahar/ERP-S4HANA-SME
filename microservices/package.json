@@ -1,0 +1,11 @@
+{
+  "name": "@erp/microservices",
+  "version": "1.0.0",
+  "description": "ERP S/4HANA Microservices Workspace",
+  "private": true,
+  "scripts": {
+    "start:gateway": "cd api-gateway && npm run start:dev",
+    "start:inventory": "cd inventory-service && npm run start:dev",
+    "start:sales": "cd sales-service && npm run start:dev"
+  }
+}
