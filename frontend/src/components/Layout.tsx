@@ -15,45 +15,58 @@ import {
   X,
   ChevronRight,
   Bell,
-  Search
+  Search,
+  BookOpen,
+  DollarSign,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import dashboardConfig from '../dashboard_config.json';
 
-const SidebarItem: React.FC<{ to: string; icon: React.ReactNode; label: string; active?: boolean }> = ({ to, icon, label, active }) => (
-  <Link
-    to={to}
-    className={`flex items-center justify-between group px-3 py-2.5 rounded-xl transition-all duration-200 ${
-      active 
-        ? 'bg-[#4f46e5] text-white shadow-lg shadow-indigo-200' 
-        : 'text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white'
-    }`}
-  >
-    <div className="flex items-center gap-3">
-      <div className={`${active ? 'text-white' : 'text-[#64748b] group-hover:text-indigo-400'} transition-colors`}>
-        {icon}
+const IconMap: Record<string, any> = {
+  LayoutDashboard,
+  Package,
+  Warehouse,
+  ShoppingCart,
+  Truck,
+  Users,
+  Briefcase,
+  TrendingUp,
+  UserCircle,
+  BookOpen,
+  DollarSign,
+  FileText
+};
+
+const SidebarItem: React.FC<{ to: string; icon: string; label: string; active?: boolean }> = ({ to, icon, label, active }) => {
+  const IconComponent = IconMap[icon] || LayoutDashboard;
+  return (
+    <Link
+      to={to}
+      className={`flex items-center justify-between group px-3 py-2.5 rounded-xl transition-all duration-200 ${
+        active 
+          ? 'bg-[#4f46e5] text-white shadow-lg shadow-indigo-200' 
+          : 'text-[#cbd5e1] hover:bg-[#1e293b] hover:text-white'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <div className={`${active ? 'text-white' : 'text-[#64748b] group-hover:text-indigo-400'} transition-colors`}>
+          <IconComponent size={20} />
+        </div>
+        <span className="font-medium text-sm">{label}</span>
       </div>
-      <span className="font-medium text-sm">{label}</span>
-    </div>
-    {active && <ChevronRight size={14} className="text-white/70" />}
-  </Link>
-);
+      {active && <ChevronRight size={14} className="text-white/70" />}
+    </Link>
+  );
+};
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  const menuItems = [
-    { to: '/dashboard', icon: <LayoutDashboard size={20} />, label: 'Dashboard' },
-    { to: '/inventory', icon: <Package size={20} />, label: 'Inventory' },
-    { to: '/warehouse', icon: <Warehouse size={20} />, label: 'Warehouse' },
-    { to: '/sales', icon: <ShoppingCart size={20} />, label: 'Sales' },
-    { to: '/purchase', icon: <Truck size={20} />, label: 'Purchase' },
-    { to: '/finance', icon: <TrendingUp size={20} />, label: 'Finance' },
-    { to: '/hr', icon: <Briefcase size={20} />, label: 'HR' },
-    { to: '/crm', icon: <Users size={20} />, label: 'CRM' },
-    { to: '/users', icon: <UserCircle size={20} />, label: 'User Mgmt' },
-  ];
+  const roleConfig = (dashboardConfig.roles as any)[user?.role || 'USER'] || dashboardConfig.roles.USER;
+  const menuItems = roleConfig.sidebar_links;
 
   return (
     <div className="flex h-screen bg-[#f8fafc] overflow-hidden">
@@ -74,11 +87,13 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
           <p className="px-3 py-2 text-[10px] font-bold text-[#64748b] uppercase tracking-widest">Main Menu</p>
-          {menuItems.map((item) => (
+          {menuItems.map((item: any) => (
             <SidebarItem 
-              key={item.to} 
-              {...item} 
-              active={location.pathname === item.to} 
+              key={item.path} 
+              to={item.path}
+              icon={item.icon}
+              label={item.title} 
+              active={location.pathname === item.path} 
             />
           ))}
         </nav>
@@ -146,7 +161,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           <div className="max-w-7xl mx-auto">
             <div className="mb-8">
               <h1 className="text-2xl font-extrabold text-[#0f172a] tracking-tight">
-                {menuItems.find(m => m.to === location.pathname)?.label || 'Overview'}
+                {menuItems.find((m: any) => m.path === location.pathname)?.title || 'Overview'}
               </h1>
               <p className="text-[#64748b] text-sm mt-1">Manage your enterprise resources and business operations.</p>
             </div>

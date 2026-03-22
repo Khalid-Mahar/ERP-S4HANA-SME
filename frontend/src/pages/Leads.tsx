@@ -1,17 +1,35 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Users, UserPlus, Target, TrendingUp, Mail, Phone, Calendar } from 'lucide-react';
 import { crmApi } from '../api';
 import DataTable from '../components/DataTable';
+import Modal from '../components/Modal';
+import toast from 'react-hot-toast';
 import React from 'react';
 
+const EMPTY_FORM = { name: '', company: '', email: '', phone: '', status: 'NEW', value: 0, source: 'Manual' };
+
 export default function LeadsPage() {
+  const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
 
   const { data, isLoading } = useQuery({
     queryKey: ['leads', page, search],
     queryFn: () => crmApi.getLeads({ page, pageSize: 20, search }),
+  });
+
+  const mutation = useMutation({
+    mutationFn: (d: any) => crmApi.createLead(d),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['leads'] });
+      setModalOpen(false);
+      setForm({ ...EMPTY_FORM });
+      toast.success('New lead registered in pipeline');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Error creating lead'),
   });
 
   const leads = (data as any)?.data || [];
@@ -60,7 +78,10 @@ export default function LeadsPage() {
       header: '',
       width: '120px',
       render: (r: any) => (
-        <button className="text-[#4f46e5] font-black text-[11px] uppercase tracking-wider hover:underline flex items-center gap-1">
+        <button 
+          onClick={() => toast.info(`Progressing lead: ${r.name}`)}
+          className="text-[#4f46e5] font-black text-[11px] uppercase tracking-wider hover:underline flex items-center gap-1"
+        >
           <TrendingUp size={12} /> Progress Lead
         </button>
       )
@@ -78,11 +99,57 @@ export default function LeadsPage() {
         onSearch={setSearch}
         loading={isLoading}
         actions={
-          <button className="btn btn-primary">
+          <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
             <UserPlus size={18} /> New Lead
           </button>
         }
       />
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Register New Sales Lead"
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setModalOpen(false)}>Cancel</button>
+            <button className="btn btn-primary" onClick={() => mutation.mutate(form)} disabled={mutation.isPending}>
+              Add to CRM
+            </button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Contact Name</label>
+            <input className="form-input" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} placeholder="John Doe" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Company Name</label>
+            <input className="form-input" value={form.company} onChange={(e) => setForm({...form, company: e.target.value})} placeholder="Acme Corp" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Email Address</label>
+            <input className="form-input" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} placeholder="john@company.com" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Expected Value ($)</label>
+            <input className="form-input" type="number" value={form.value} onChange={(e) => setForm({...form, value: Number(e.target.value)})} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Pipeline Stage</label>
+            <select className="form-input" value={form.status} onChange={(e) => setForm({...form, status: e.target.value})}>
+              <option value="NEW">New Lead</option>
+              <option value="QUALIFIED">Qualified</option>
+              <option value="PROPOSAL">Proposal</option>
+              <option value="NEGOTIATION">Negotiation</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Lead Source</label>
+            <input className="form-input" value={form.source} onChange={(e) => setForm({...form, source: e.target.value})} placeholder="Website, Referral..." />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

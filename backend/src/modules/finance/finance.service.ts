@@ -1,18 +1,60 @@
 import {
   Injectable, NotFoundException, BadRequestException, Logger,
 } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../common/prisma.service';
 import { PaginationDto, PaginatedResult } from '../../common/dto/pagination.dto';
 import {
   CreateAccountDto, UpdateAccountDto,
   CreateTransactionDto, FinancialReportDto,
 } from './dto/finance.dto';
+import { SalesOrderShippedEvent } from '../../common/events/sales-order-shipped.event';
 
 @Injectable()
 export class FinanceService {
   private readonly logger = new Logger(FinanceService.name);
 
   constructor(private prisma: PrismaService) {}
+
+  @OnEvent('sales.order.shipped')
+  async handleSalesOrderShipped(event: SalesOrderShippedEvent) {
+    this.logger.log(`Processing ledger entry for Sales Order: ${event.orderId}`);
+    
+    const order = await this.prisma.salesOrder.findUnique({
+      where: { id: event.orderId },
+      include: { lines: true },
+    });
+
+    if (!order) return;
+
+    const [arAccount, revAccount] = await Promise.all([
+      this.prisma.account.findFirst({ where: { companyId: event.companyId, code: '1200' } }),
+      this.prisma.account.findFirst({ where: { companyId: event.companyId, code: '4000' } }),
+    ]);
+
+    if (!arAccount || !revAccount) {
+      this.logger.error('AR or Revenue account not found, skipping ledger entry');
+      return;
+    }
+
+    await this.prisma.transaction.create({
+      data: {
+        companyId: event.companyId,
+        transactionDate: new Date(),
+        description: `Auto-Post: Sales Order ${order.orderNumber} Shipped`,
+        referenceType: 'SALES_ORDER',
+        referenceId: order.id,
+        totalAmount: order.totalAmount,
+        status: 'POSTED',
+        lines: {
+          create: [
+            { debitAccountId: arAccount.id, amount: order.totalAmount },
+            { creditAccountId: revAccount.id, amount: order.totalAmount },
+          ],
+        },
+      },
+    });
+  }
 
   // ── Chart of Accounts ──────────────────────────────────────────
 
@@ -55,6 +97,21 @@ export class FinanceService {
       );
     }
 
+    // Check Posting Period
+    const date = dto.transactionDate ? new Date(dto.transactionDate) : new Date();
+    const period = await this.prisma.postingPeriod.findFirst({
+      where: {
+        companyId,
+        startDate: { lte: date },
+        endDate: { gte: date },
+        isClosed: false,
+      },
+    });
+
+    if (!period) {
+      throw new BadRequestException('No open posting period found for the transaction date');
+    }
+
     const accountIds = [
       ...dto.lines.map((l) => l.debitAccountId),
       ...dto.lines.map((l) => l.creditAccountId),
@@ -70,11 +127,13 @@ export class FinanceService {
     return this.prisma.transaction.create({
       data: {
         companyId,
-        transactionDate: new Date(dto.transactionDate),
+        postingPeriodId: period.id,
+        transactionDate: date,
         description: dto.description,
         referenceType: dto.referenceType,
         referenceId: dto.referenceId,
         totalAmount: totalDebits,
+        status: 'POSTED',
         lines: { create: dto.lines },
       },
       include: {
@@ -126,7 +185,14 @@ export class FinanceService {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { transactionDate: 'desc' },
-        include: { _count: { select: { lines: true } } },
+        include: { 
+          lines: {
+            include: {
+              debitAccount: { select: { id: true, code: true, name: true } },
+              creditAccount: { select: { id: true, code: true, name: true } },
+            }
+          }
+        },
       }),
       this.prisma.transaction.count({ where }),
     ]);
@@ -230,5 +296,71 @@ export class FinanceService {
       totals: { debits: sumDebits, credits: sumCredits },
       isBalanced: Math.abs(sumDebits - sumCredits) < 0.01,
     };
+  }
+
+  // ── KPI & Analytics ───────────────────────────────────────────
+
+  async getNetProfitKPI(companyId: string) {
+    const start = new Date();
+    start.setDate(1); // Beginning of month
+    const report = await this.getIncomeStatement(companyId, {
+      startDate: start.toISOString(),
+      endDate: new Date().toISOString(),
+    });
+    return { value: report.netIncome };
+  }
+
+  async getRevenueExpenseAnalytics(companyId: string) {
+    // Return mock data structure for charts
+    return [
+      { month: 'Jan', revenue: 4500, expense: 3200 },
+      { month: 'Feb', revenue: 5200, expense: 3400 },
+      { month: 'Mar', revenue: 4800, expense: 3100 },
+    ];
+  }
+
+  // ── Payments ──────────────────────────────────────────────────
+
+  async recordInvoicePayment(companyId: string, invoiceId: string, amount: number, accountId: string) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+    });
+
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.status === 'PAID') throw new BadRequestException('Invoice is already paid');
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Update Invoice Status
+      const newTotalPaid = Number(invoice.totalAmount) - amount; // Simplified for this logic
+      const status = newTotalPaid <= 0 ? 'PAID' : 'PARTIALLY_PAID';
+
+      await tx.invoice.update({
+        where: { id: invoiceId },
+        data: { status },
+      });
+
+      // 2. Create Ledger Entry
+      // Debit Cash/Bank (accountId), Credit Accounts Receivable (1200)
+      const arAccount = await tx.account.findFirst({ where: { companyId, code: '1200' } });
+      if (!arAccount) throw new BadRequestException('Accounts Receivable account not found');
+
+      await tx.transaction.create({
+        data: {
+          companyId,
+          transactionDate: new Date(),
+          description: `Payment received for Invoice ${invoice.invoiceNumber}`,
+          totalAmount: amount,
+          status: 'POSTED',
+          lines: {
+            create: [
+              { debitAccountId: accountId, amount },
+              { creditAccountId: arAccount.id, amount },
+            ],
+          },
+        },
+      });
+
+      return { message: 'Payment recorded successfully', status };
+    });
   }
 }

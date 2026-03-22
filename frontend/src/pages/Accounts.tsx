@@ -138,8 +138,9 @@ export default function AccountsPage() {
                 <p className="text-[10px] font-black text-[#64748b] uppercase tracking-widest">Account Balance</p>
                 <p className="text-2xl font-black text-[#0f172a]">
                   ${transactions.reduce((s: number, t: any) => {
-                    const line = t.lines.find((l: any) => l.debitAccountId === selectedAccount?.id || l.creditAccountId === selectedAccount?.id);
-                    return s + (line?.debitAccountId === selectedAccount?.id ? Number(line.amount) : -Number(line.amount));
+                    const line = (t.lines || []).find((l: any) => l.debitAccountId === selectedAccount?.id || l.creditAccountId === selectedAccount?.id);
+                    if (!line) return s;
+                    return s + (line.debitAccountId === selectedAccount?.id ? Number(line.amount) : -Number(line.amount));
                   }, 0).toLocaleString()}
                 </p>
               </div>
@@ -166,7 +167,7 @@ export default function AccountsPage() {
                 ) : transactions.length === 0 ? (
                   <tr><td colSpan={4} className="text-center py-8 text-[#94a3b8]">No transactions found for this account</td></tr>
                 ) : transactions.map((t: any, i: number) => {
-                  const line = t.lines.find((l: any) => l.debitAccountId === selectedAccount?.id || l.creditAccountId === selectedAccount?.id);
+                  const line = (t.lines || []).find((l: any) => l.debitAccountId === selectedAccount?.id || l.creditAccountId === selectedAccount?.id);
                   return (
                     <tr key={i} className="hover:bg-gray-50/50">
                       <td className="px-4 py-3 text-[#64748b] font-medium">{new Date(t.transactionDate).toLocaleDateString()}</td>

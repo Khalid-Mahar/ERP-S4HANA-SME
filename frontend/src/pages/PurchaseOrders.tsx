@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Truck, Calendar, DollarSign, ArrowRight, FileText, Filter, Trash2 } from 'lucide-react';
-import { purchaseApi, inventoryApi } from '../api';
+import { purchaseApi, inventoryApi, warehouseApi } from '../api';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
 import toast from 'react-hot-toast';

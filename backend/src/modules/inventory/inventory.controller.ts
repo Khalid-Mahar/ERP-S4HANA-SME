@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { InventoryService } from './inventory.service';
+import { CostingService } from './costing.service';
 import {
   CreateItemDto,
   UpdateItemDto,
@@ -29,7 +30,17 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 @Controller('inventory')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InventoryController {
-  constructor(private readonly inventoryService: InventoryService) {}
+  constructor(
+    private readonly inventoryService: InventoryService,
+    private readonly costingService: CostingService,
+  ) {}
+
+  @Get('valuation')
+  @Roles(Role.ADMIN, Role.MANAGER)
+  @ApiOperation({ summary: 'Get total inventory valuation (FIFO)' })
+  getValuation(@CurrentUser() user: any) {
+    return this.costingService.getInventoryValuation(user.companyId);
+  }
 
   @Post('items')
   @Roles(Role.ADMIN, Role.MANAGER)

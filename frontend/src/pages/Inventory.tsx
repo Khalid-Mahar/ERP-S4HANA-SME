@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit2, Trash2, Package, AlertTriangle, Sparkles } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, AlertTriangle, Sparkles, FileText, TrendingUp } from 'lucide-react';
 import { inventoryApi, aiApi } from '../api';
 import DataTable from '../components/DataTable';
 import Modal from '../components/Modal';
@@ -21,6 +21,7 @@ export default function ItemsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [valuationModalOpen, setValuationModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [aiLoading, setAiLoading] = useState(false);
@@ -28,6 +29,12 @@ export default function ItemsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['items', page, search],
     queryFn: () => inventoryApi.getItems({ page, pageSize: 20, search }),
+  });
+
+  const { data: valuationData, isLoading: valuationLoading } = useQuery({
+    queryKey: ['inventory-valuation'],
+    queryFn: () => inventoryApi.getValuation(),
+    enabled: valuationModalOpen,
   });
 
   const generateAiDescription = async () => {
@@ -135,6 +142,18 @@ export default function ItemsPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-black text-[#0f172a] tracking-tight">Inventory Items</h1>
+        <div className="flex gap-2">
+          <button className="btn btn-secondary flex items-center gap-2" onClick={() => setValuationModalOpen(true)}>
+            <TrendingUp size={18} /> Valuation Report
+          </button>
+          <button className="btn btn-primary flex items-center gap-2" onClick={openCreate}>
+            <Plus size={18} /> Add Product
+          </button>
+        </div>
+      </div>
+
       <DataTable
         data={items}
         columns={columns}
@@ -145,12 +164,57 @@ export default function ItemsPage() {
         onSearch={setSearch}
         searchPlaceholder="Search products..."
         loading={isLoading}
-        actions={
-          <button className="btn btn-primary" onClick={openCreate}>
-            <Plus size={18} /> Add Product
-          </button>
-        }
       />
+
+      <Modal
+        open={valuationModalOpen}
+        onClose={() => setValuationModalOpen(false)}
+        title="Inventory Valuation (FIFO)"
+        size="lg"
+      >
+        <div className="space-y-6">
+          <div className="bg-indigo-50 p-6 rounded-3xl border border-indigo-100 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Total Company Inventory Value</p>
+              <p className="text-3xl font-black text-indigo-900">
+                ${Number(valuationData?.data?.totalValuation || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="p-4 bg-white rounded-2xl shadow-sm">
+              <TrendingUp size={24} className="text-indigo-500" />
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-[#e2e8f0]">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#f8fafc] border-b border-[#e2e8f0]">
+                <tr>
+                  <th className="px-4 py-3 font-black text-[#0f172a] uppercase tracking-wider">SKU</th>
+                  <th className="px-4 py-3 font-black text-[#0f172a] uppercase tracking-wider">Product</th>
+                  <th className="px-4 py-3 font-black text-[#0f172a] uppercase tracking-wider text-right">Quantity</th>
+                  <th className="px-4 py-3 font-black text-[#0f172a] uppercase tracking-wider text-right">Avg Cost</th>
+                  <th className="px-4 py-3 font-black text-[#0f172a] uppercase tracking-wider text-right">Total Value</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#f1f5f9]">
+                {valuationLoading ? (
+                  <tr><td colSpan={5} className="text-center py-8">Calculating valuation...</td></tr>
+                ) : valuationData?.data?.items?.length === 0 ? (
+                  <tr><td colSpan={5} className="text-center py-8 text-[#94a3b8]">No inventory found</td></tr>
+                ) : valuationData?.data?.items?.map((item: any, i: number) => (
+                  <tr key={i} className="hover:bg-gray-50/50">
+                    <td className="px-4 py-3 font-bold text-[#4f46e5]">{item.sku}</td>
+                    <td className="px-4 py-3 font-medium text-[#0f172a]">{item.name}</td>
+                    <td className="px-4 py-3 text-right font-bold text-[#64748b]">{Number(item.totalQty).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right font-bold text-[#64748b]">${Number(item.avgUnitCost).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right font-black text-[#0f172a]">${Number(item.valuation).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Modal>
 
       <Modal 
         open={modalOpen} 

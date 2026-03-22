@@ -5,6 +5,7 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../common/prisma.service';
 import { PaginationDto, PaginatedResult } from '../../common/dto/pagination.dto';
 import {
@@ -13,12 +14,96 @@ import {
   StockMovementDto,
   AdjustStockDto,
 } from './dto/inventory.dto';
+import { SalesOrderShippedEvent } from '../../common/events/sales-order-shipped.event';
+import { CostingService } from './costing.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class InventoryService {
   private readonly logger = new Logger(InventoryService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private costingService: CostingService,
+    private auditService: AuditService,
+  ) {}
+
+  @OnEvent('sales.order.shipped')
+  async handleSalesOrderShipped(event: SalesOrderShippedEvent) {
+    this.logger.log(`Processing stock deduction for Sales Order: ${event.orderId}`);
+    
+    const order = await this.prisma.salesOrder.findUnique({
+      where: { id: event.orderId },
+      include: { lines: true },
+    });
+
+    if (!order) return;
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const line of order.lines) {
+        await this.recordStockMovementTx(tx, event.companyId, {
+          itemId: line.itemId,
+          fromWarehouseId: event.warehouseId,
+          quantity: Number(line.quantity),
+          movementType: 'OUT',
+          referenceType: 'SALES_ORDER',
+          referenceId: order.id,
+        });
+      }
+    });
+  }
+
+  private async recordStockMovementTx(tx: any, companyId: string, dto: any) {
+    let unitCost = dto.unitCost;
+
+    if (dto.movementType === 'OUT') {
+      const calculatedCost = await this.costingService.calculateFIFOCost(tx, companyId, dto.itemId, dto.quantity);
+      unitCost = calculatedCost / dto.quantity;
+    }
+
+    await tx.stockMovement.create({
+      data: {
+        companyId,
+        itemId: dto.itemId,
+        fromWarehouseId: dto.fromWarehouseId,
+        toWarehouseId: dto.toWarehouseId,
+        quantity: dto.quantity,
+        unitCost: unitCost,
+        movementType: dto.movementType,
+        referenceType: dto.referenceType,
+        referenceId: dto.referenceId,
+      },
+    });
+
+    const level = await tx.stockLevel.findFirst({
+      where: { itemId: dto.itemId, warehouseId: dto.fromWarehouseId || dto.toWarehouseId },
+    });
+
+    if (dto.movementType === 'OUT') {
+      if (!level || Number(level.quantity) < dto.quantity) {
+        throw new BadRequestException(`Insufficient stock for item ${dto.itemId}`);
+      }
+      await tx.stockLevel.update({
+        where: { id: level.id },
+        data: { quantity: { decrement: dto.quantity } },
+      });
+    } else {
+      if (level) {
+        await tx.stockLevel.update({
+          where: { id: level.id },
+          data: { quantity: { increment: dto.quantity } },
+        });
+      } else {
+        await tx.stockLevel.create({
+          data: {
+            itemId: dto.itemId,
+            warehouseId: dto.toWarehouseId!,
+            quantity: dto.quantity,
+          },
+        });
+      }
+    }
+  }
 
   // ── Items CRUD ─────────────────────────────────────────────────
 
@@ -144,7 +229,12 @@ export class InventoryService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const movement = await tx.stockMovement.create({ data: { ...dto } });
+      const movement = await tx.stockMovement.create({ 
+        data: { 
+          ...dto,
+          companyId 
+        } 
+      });
 
       if (dto.movementType === 'IN' && dto.toWarehouseId) {
         await this.upsertStockLevel(tx, dto.itemId, dto.toWarehouseId, dto.quantity);
@@ -183,6 +273,7 @@ export class InventoryService {
 
       await tx.stockMovement.create({
         data: {
+          companyId,
           itemId,
           toWarehouseId: diff >= 0 ? dto.warehouseId : undefined,
           fromWarehouseId: diff < 0 ? dto.warehouseId : undefined,
@@ -201,12 +292,12 @@ export class InventoryService {
           },
         },
         update: { quantity: dto.quantity },
-        create: {
-          itemId,
-          warehouseId: dto.warehouseId,
-          quantity: dto.quantity,
-        },
-      });
+          create: {
+            itemId,
+            warehouseId: dto.warehouseId,
+            quantity: dto.quantity,
+          },
+        });
     });
   }
 

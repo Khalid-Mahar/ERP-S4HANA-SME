@@ -1,4 +1,5 @@
 import { api } from './client';
+export { api };
 
 export interface PaginatedResponse<T> {
   data: T[];
@@ -34,6 +35,7 @@ export const inventoryApi = {
   recordMovement: (data: any) => api.post<any>('/inventory/movements', data),
   getMovements: (params?: PaginationParams & { itemId?: string }) => api.get<PaginatedResponse<any>>('/inventory/movements', params),
   getStockLevels: (params?: { itemId?: string; warehouseId?: string }) => api.get<any[]>('/inventory/stock-levels', params),
+  getValuation: () => api.get<any>('/inventory/valuation'),
 };
 
 export const warehouseApi = {
@@ -77,6 +79,7 @@ export const financeApi = {
   createTransaction: (data: any) => api.post<any>('/finance/transactions', data),
   getIncomeStatement: (startDate: string, endDate: string) => api.get<any>('/finance/reports/income-statement', { startDate, endDate }),
   getTrialBalance: () => api.get<any>('/finance/reports/trial-balance'),
+  recordPayment: (invoiceId: string, data: { amount: number; accountId: string }) => api.post<any>(`/finance/invoices/${invoiceId}/pay`, data),
 };
 
 export const hrApi = {

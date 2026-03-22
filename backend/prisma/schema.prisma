@@ -24,6 +24,10 @@ model Company {
   updatedAt   DateTime @updatedAt
 
   users         User[]
+  auditLogs     AuditLog[]
+  postingPeriods PostingPeriod[]
+  invoices      Invoice[]
+  stockMovements StockMovement[]
   warehouses    Warehouse[]
   items         Item[]
   customers     Customer[]
@@ -57,6 +61,8 @@ model User {
 
   @@unique([companyId, email])
   @@map("users")
+  @@index([companyId])
+  @@index([email])
 }
 
 model RefreshToken {
@@ -72,19 +78,24 @@ model RefreshToken {
 }
 
 model AuditLog {
-  id         String   @id @default(uuid())
-  userId     String
-  action     String
-  entity     String
-  entityId   String
-  oldValues  Json?
-  newValues  Json?
-  ipAddress  String?
-  createdAt  DateTime @default(now())
+  id          String   @id @default(uuid())
+  companyId   String
+  userId      String?
+  action      String   // CREATE, UPDATE, DELETE, LOGIN, SHIPPED, etc.
+  module      String   // SALES, PURCHASE, FINANCE, etc.
+  resourceId  String?
+  oldValue    Json?
+  newValue    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
 
-  user       User     @relation(fields: [userId], references: [id])
+  user        User?    @relation(fields: [userId], references: [id])
+  company     Company  @relation(fields: [companyId], references: [id])
 
   @@map("audit_logs")
+  @@index([companyId, createdAt])
+  @@index([userId])
 }
 
 // ============================================================
@@ -113,6 +124,7 @@ model Item {
   stockMovements StockMovement[]
   salesOrderLines SalesOrderLine[]
   purchaseOrderLines PurchaseOrderLine[]
+  invoiceLines   InvoiceLine[]
 
   @@unique([companyId, sku])
   @@map("items")
@@ -172,21 +184,25 @@ model StockLevel {
 
 model StockMovement {
   id              String         @id @default(uuid())
+  companyId       String
   itemId          String
   fromWarehouseId String?
   toWarehouseId   String?
   quantity        Decimal        @db.Decimal(12,4)
+  unitCost        Decimal?       @db.Decimal(12,2) // For FIFO/LIFO calculation
   movementType    MovementType
   referenceType   String?
   referenceId     String?
   notes           String?
   createdAt       DateTime       @default(now())
 
+  company         Company        @relation(fields: [companyId], references: [id])
   item            Item           @relation(fields: [itemId], references: [id])
   fromWarehouse   Warehouse?     @relation("FromWarehouse", fields: [fromWarehouseId], references: [id])
   toWarehouse     Warehouse?     @relation("ToWarehouse", fields: [toWarehouseId], references: [id])
 
   @@map("stock_movements")
+  @@index([companyId, createdAt])
 }
 
 // ============================================================
@@ -221,6 +237,8 @@ model SalesOrder {
   customerId    String
   orderNumber   String
   status        SalesOrderStatus @default(DRAFT)
+  approverId    String?
+  approvalDate  DateTime?
   orderDate     DateTime        @default(now())
   deliveryDate  DateTime?
   subtotal      Decimal         @default(0) @db.Decimal(12,2)
@@ -236,6 +254,8 @@ model SalesOrder {
   transactions  Transaction[]
 
   @@unique([companyId, orderNumber])
+  @@index([companyId, status])
+  @@index([createdAt])
   @@map("sales_orders")
 }
 
@@ -285,6 +305,8 @@ model PurchaseOrder {
   vendorId     String
   orderNumber  String
   status       PurchaseOrderStatus @default(DRAFT)
+  approverId   String?
+  approvalDate DateTime?
   orderDate    DateTime            @default(now())
   expectedDate DateTime?
   subtotal     Decimal             @default(0) @db.Decimal(12,2)
@@ -337,6 +359,62 @@ model GoodsReceipt {
 // FINANCE MODULE
 // ============================================================
 
+model Invoice {
+  id              String    @id @default(uuid())
+  companyId       String
+  referenceType   String    // SALES_ORDER or PURCHASE_ORDER
+  referenceId     String
+  invoiceNumber   String
+  invoiceDate     DateTime  @default(now())
+  dueDate         DateTime?
+  totalAmount     Decimal   @db.Decimal(12,2)
+  status          InvoiceStatus @default(UNPAID)
+  createdAt       DateTime  @default(now())
+
+  company         Company   @relation(fields: [companyId], references: [id])
+  lines           InvoiceLine[]
+
+  @@unique([companyId, invoiceNumber])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  itemId      String
+  quantity    Decimal  @db.Decimal(12,4)
+  unitPrice   Decimal  @db.Decimal(12,2)
+  lineTotal   Decimal  @db.Decimal(12,2)
+
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  item        Item     @relation(fields: [itemId], references: [id])
+
+  @@map("invoice_lines")
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+model PostingPeriod {
+  id          String   @id @default(uuid())
+  companyId   String
+  name        String   // e.g. "March 2026"
+  startDate   DateTime
+  endDate     DateTime
+  isClosed    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  company     Company  @relation(fields: [companyId], references: [id])
+  transactions Transaction[]
+
+  @@unique([companyId, name])
+  @@map("posting_periods")
+}
+
 model Account {
   id          String      @id @default(uuid())
   companyId   String
@@ -360,6 +438,7 @@ model Account {
 model Transaction {
   id              String    @id @default(uuid())
   companyId       String
+  postingPeriodId String?
   transactionDate DateTime  @default(now())
   referenceType   String?
   referenceId     String?
@@ -367,14 +446,25 @@ model Transaction {
   purchaseOrderId String?
   description     String
   totalAmount     Decimal   @db.Decimal(12,2)
+  status          TransactionStatus @default(POSTED)
   createdAt       DateTime  @default(now())
 
   company         Company        @relation(fields: [companyId], references: [id])
+  postingPeriod   PostingPeriod? @relation(fields: [postingPeriodId], references: [id])
   salesOrder      SalesOrder?    @relation(fields: [salesOrderId], references: [id])
   purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
   lines           TransactionLine[]
 
   @@map("transactions")
+  @@index([companyId, transactionDate])
+  @@index([referenceType, referenceId])
+}
+
+enum TransactionStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+  REVERSED
 }
 
 model TransactionLine {
@@ -484,6 +574,10 @@ enum Role {
   ADMIN
   MANAGER
   USER
+  CFO
+  SALES_MANAGER
+  WAREHOUSE_HEAD
+  HR_MANAGER
 }
 
 enum MovementType {
@@ -495,6 +589,7 @@ enum MovementType {
 
 enum SalesOrderStatus {
   DRAFT
+  PENDING_APPROVAL
   CONFIRMED
   PICKING
   SHIPPED
@@ -504,6 +599,7 @@ enum SalesOrderStatus {
 
 enum PurchaseOrderStatus {
   DRAFT
+  PENDING_APPROVAL
   SENT
   CONFIRMED
   PARTIALLY_RECEIVED

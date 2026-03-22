@@ -62,4 +62,25 @@ export class FinanceController {
   getTrialBalance(@CurrentUser() user: any) {
     return this.financeService.getTrialBalance(user.companyId);
   }
+
+  @Get('kpi/net-profit')
+  getNetProfit(@CurrentUser() user: any) {
+    return this.financeService.getNetProfitKPI(user.companyId);
+  }
+
+  @Get('analytics/revenue-expense')
+  getRevenueExpense(@CurrentUser() user: any) {
+    return this.financeService.getRevenueExpenseAnalytics(user.companyId);
+  }
+
+  @Post('invoices/:id/pay')
+  @Roles(Role.ADMIN, Role.MANAGER)
+  @ApiOperation({ summary: 'Record payment for an invoice' })
+  recordPayment(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() dto: { amount: number; accountId: string },
+  ) {
+    return this.financeService.recordInvoicePayment(user.companyId, id, dto.amount, dto.accountId);
+  }
 }

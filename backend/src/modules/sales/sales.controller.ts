@@ -42,7 +42,7 @@ export class SalesController {
   @Roles(Role.MANAGER, Role.ADMIN)
   @ApiOperation({ summary: 'Create a new sales order' })
   createOrder(@CurrentUser() user: any, @Body() dto: CreateSalesOrderDto) {
-    return this.salesService.createSalesOrder(user.companyId, dto);
+    return this.salesService.createSalesOrder(user.companyId, user.id, dto);
   }
 
   @Get('orders')
@@ -69,6 +69,16 @@ export class SalesController {
     @Param('id') id: string,
     @Body() dto: UpdateSalesOrderStatusDto,
   ) {
-    return this.salesService.updateOrderStatus(user.companyId, id, dto);
+    return this.salesService.updateOrderStatus(user.companyId, user.id, id, dto);
+  }
+
+  @Get('kpi/sales-returns')
+  getSalesReturns(@CurrentUser() user: any) {
+    return this.salesService.getSalesReturnsKPI(user.companyId);
+  }
+
+  @Get('analytics/top-products')
+  getTopProducts(@CurrentUser() user: any) {
+    return this.salesService.getTopProducts(user.companyId);
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AiService } from './ai.service';
 import { AiAnalysisDto, GenerateDescriptionDto } from './dto/ai.dto';
@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('AI Integration')
 @ApiBearerAuth('access-token')
@@ -21,10 +22,14 @@ export class AiController {
     return this.aiService.generateItemDescription(dto.itemName, dto.category);
   }
 
-  @Post('analyze-trends')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'Analyze business data trends using AI' })
-  analyzeTrends(@Body() dto: AiAnalysisDto) {
-    return this.aiService.analyzeBusinessTrends(dto.prompt, dto.context);
+  @Get('insights')
+  @Roles(Role.ADMIN, Role.MANAGER)
+  @ApiOperation({ summary: 'Get AI-driven business insights' })
+  getInsights(
+    @CurrentUser() user: any,
+    @Query('module') module: string,
+    @Body() context: any
+  ) {
+    return this.aiService.getBusinessInsights(user.companyId, module, context);
   }
 }

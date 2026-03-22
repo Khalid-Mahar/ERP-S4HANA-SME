@@ -2,6 +2,7 @@ import {
   Injectable, NotFoundException, ConflictException,
   BadRequestException, Logger,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../common/prisma.service';
 import { InventoryService } from '../inventory/inventory.service';
 import { PaginationDto, PaginatedResult } from '../../common/dto/pagination.dto';
@@ -9,6 +10,8 @@ import {
   CreateCustomerDto, UpdateCustomerDto,
   CreateSalesOrderDto, UpdateSalesOrderStatusDto,
 } from './dto/sales.dto';
+import { AuditService } from '../audit/audit.service';
+import { SalesOrderShippedEvent } from '../../common/events/sales-order-shipped.event';
 
 @Injectable()
 export class SalesService {
@@ -17,6 +20,8 @@ export class SalesService {
   constructor(
     private prisma: PrismaService,
     private inventoryService: InventoryService,
+    private auditService: AuditService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   // ── Customers ──────────────────────────────────────────────────
@@ -59,7 +64,7 @@ export class SalesService {
   }
 
   // ── Sales Orders ───────────────────────────────────────────────
-  async createSalesOrder(companyId: string, dto: CreateSalesOrderDto) {
+  async createSalesOrder(companyId: string, userId: string, dto: CreateSalesOrderDto) {
     const customer = await this.prisma.customer.findFirst({ where: { id: dto.customerId, companyId } });
     if (!customer) throw new NotFoundException('Customer not found');
 
@@ -94,6 +99,15 @@ export class SalesService {
           lines: { create: lineData },
         },
         include: { lines: { include: { item: { select: { sku: true, name: true } } } }, customer: true },
+      });
+
+      await this.auditService.log({
+        companyId,
+        userId,
+        action: 'CREATE',
+        module: 'SALES',
+        resourceId: order.id,
+        newValue: order,
       });
 
       this.logger.log(`Sales order created: ${orderNumber}`);
@@ -149,33 +163,37 @@ export class SalesService {
     return order;
   }
 
-  async updateOrderStatus(companyId: string, id: string, dto: UpdateSalesOrderStatusDto) {
+  async updateOrderStatus(companyId: string, userId: string, id: string, dto: UpdateSalesOrderStatusDto) {
     const order = await this.findSalesOrderById(companyId, id);
+    const oldStatus = order.status;
 
-    if (
-      (dto.status === 'SHIPPED' || dto.status === 'DELIVERED') &&
-      order.status === 'CONFIRMED'
-    ) {
-      if (!dto.warehouseId) {
-        throw new BadRequestException('Warehouse ID is required to ship order');
-      }
-
-      for (const line of order.lines) {
-        await this.inventoryService.recordStockMovement(companyId, {
-          itemId: line.itemId,
-          fromWarehouseId: dto.warehouseId,
-          quantity: Number(line.quantity),
-          movementType: 'OUT',
-          referenceType: 'SALES_ORDER',
-          referenceId: order.id,
-        });
-      }
-    }
-
-    return this.prisma.salesOrder.update({
+    const updatedOrder = await this.prisma.salesOrder.update({
       where: { id },
       data: { status: dto.status },
     });
+
+    await this.auditService.log({
+      companyId,
+      userId,
+      action: 'UPDATE_STATUS',
+      module: 'SALES',
+      resourceId: id,
+      oldValue: { status: oldStatus },
+      newValue: { status: dto.status },
+    });
+
+    // Event Trigger for Shipping
+    if (dto.status === 'SHIPPED' && oldStatus === 'CONFIRMED') {
+      if (!dto.warehouseId) {
+        throw new BadRequestException('Warehouse ID is required to ship order');
+      }
+      this.eventEmitter.emit(
+        'sales.order.shipped',
+        new SalesOrderShippedEvent(companyId, id, dto.warehouseId, userId),
+      );
+    }
+
+    return updatedOrder;
   }
 
   async getSalesSummary(companyId: string) {
@@ -193,6 +211,35 @@ export class SalesService {
       totalRevenue: totalRevenue._sum.totalAmount || 0,
       pendingOrders: pending,
     };
+  }
+
+  async getSalesReturnsKPI(companyId: string) {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const sales = await this.prisma.salesOrder.aggregate({
+      where: { companyId, status: { in: ['SHIPPED', 'DELIVERED'] }, createdAt: { gte: thirtyDaysAgo } },
+      _sum: { totalAmount: true }
+    });
+
+    return { value: sales._sum.totalAmount || 0 };
+  }
+
+  async getTopProducts(companyId: string) {
+    const products = await this.prisma.salesOrderLine.groupBy({
+      by: ['itemId'],
+      where: { salesOrder: { companyId } },
+      _sum: { lineTotal: true },
+      orderBy: { _sum: { lineTotal: 'desc' } },
+      take: 5
+    });
+
+    const detailedProducts = await Promise.all(products.map(async p => {
+      const item = await this.prisma.item.findUnique({ where: { id: p.itemId }, select: { name: true } });
+      return { name: item?.name, value: p._sum.lineTotal };
+    }));
+
+    return detailedProducts;
   }
 
   private async generateOrderNumber(companyId: string, prefix: string): Promise<string> {

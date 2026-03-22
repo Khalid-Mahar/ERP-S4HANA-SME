@@ -42,7 +42,7 @@ export class AiService {
     }
   }
 
-  async analyzeBusinessTrends(prompt: string, context: any) {
+  async getBusinessInsights(companyId: string, module: string, data: any) {
     if (!this.openai) return { message: 'AI analytics is currently disabled.' };
 
     try {
@@ -51,11 +51,11 @@ export class AiService {
         messages: [
           {
             role: 'system',
-            content: 'You are a senior business analyst. Analyze the provided ERP data context and answer the user query with actionable insights.'
+            content: `You are a SAP S/4HANA consultant. Analyze the following ${module} data for company ${companyId} and provide 3 actionable insights, 1 risk, and 1 recommendation in JSON format.`
           },
           {
             role: 'user',
-            content: `Query: ${prompt}\n\nData Context: ${JSON.stringify(context)}`
+            content: `Data Context: ${JSON.stringify(data)}`
           }
         ],
         response_format: { type: 'json_object' }
@@ -63,8 +63,8 @@ export class AiService {
 
       return JSON.parse(response.choices[0]?.message?.content || '{}');
     } catch (error) {
-      this.logger.error(`AI Analytics Error: ${error.message}`);
-      return { error: 'Failed to perform AI analysis.' };
+      this.logger.error(`AI Insights Error: ${error.message}`);
+      return { error: 'Failed to generate AI insights.' };
     }
   }
 }

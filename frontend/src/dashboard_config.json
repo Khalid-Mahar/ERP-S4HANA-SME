@@ -1,0 +1,119 @@
+{
+  "roles": {
+    "CFO": {
+      "sidebar_links": [
+        { "title": "Dashboard", "icon": "LayoutDashboard", "path": "/dashboard" },
+        { "title": "Chart of Accounts", "icon": "DollarSign", "path": "/finance" },
+        { "title": "General Ledger", "icon": "BookOpen", "path": "/finance" },
+        { "title": "Inventory Value", "icon": "Package", "path": "/inventory" }
+      ],
+      "widgets": [
+        {
+          "id": "net_profit_card",
+          "type": "stat_card",
+          "title": "Net Profit Margin",
+          "endpoint": "/finance/kpi/net-profit",
+          "color": "emerald",
+          "grid_size": "col-span-1"
+        },
+        {
+          "id": "revenue_vs_expense_chart",
+          "type": "area_chart",
+          "title": "Revenue vs Operating Expenses",
+          "endpoint": "/finance/analytics/revenue-expense",
+          "grid_size": "col-span-2"
+        },
+        {
+          "id": "inventory_valuation_card",
+          "type": "stat_card",
+          "title": "Inventory Asset Value",
+          "endpoint": "/inventory/valuation",
+          "color": "indigo",
+          "grid_size": "col-span-1"
+        }
+      ],
+      "permissions": {
+        "can_approve_payments": true,
+        "can_edit_tax_settings": true,
+        "view_payroll": true
+      }
+    },
+    "SALES_MANAGER": {
+      "sidebar_links": [
+        { "title": "Sales Insights", "icon": "TrendingUp", "path": "/dashboard" },
+        { "title": "Orders", "icon": "ShoppingCart", "path": "/sales" },
+        { "title": "Customers", "icon": "Users", "path": "/customers" },
+        { "title": "Leads & CRM", "icon": "Briefcase", "path": "/crm" }
+      ],
+      "widgets": [
+        {
+          "id": "sales_vs_returns_card",
+          "type": "comparison_card",
+          "title": "Sales (Last 30 Days)",
+          "endpoint": "/sales/kpi/sales-returns",
+          "color": "blue",
+          "grid_size": "col-span-1"
+        },
+        {
+          "id": "top_selling_products",
+          "type": "data_table_mini",
+          "title": "Top 5 Products",
+          "endpoint": "/sales/analytics/top-products",
+          "grid_size": "col-span-1"
+        }
+      ],
+      "permissions": {
+        "can_apply_discounts": true,
+        "can_modify_pricing": true,
+        "view_inventory_cost": false
+      }
+    },
+    "WAREHOUSE_HEAD": {
+      "sidebar_links": [
+        { "title": "Inventory", "icon": "Package", "path": "/inventory" },
+        { "title": "Warehouses", "icon": "Warehouse", "path": "/warehouse" },
+        { "title": "Purchases", "icon": "Truck", "path": "/purchase" }
+      ],
+      "widgets": [
+        {
+          "id": "low_stock_alerts",
+          "type": "alert_list",
+          "title": "Low Stock Items",
+          "endpoint": "/inventory/items/low-stock",
+          "color": "red",
+          "grid_size": "col-span-2"
+        }
+      ],
+      "permissions": {
+        "can_adjust_stock": true,
+        "can_transfer_stock": true
+      }
+    },
+    "USER": {
+      "sidebar_links": [
+        { "title": "Dashboard", "icon": "LayoutDashboard", "path": "/dashboard" },
+        { "title": "Inventory", "icon": "Package", "path": "/inventory" },
+        { "title": "Sales", "icon": "ShoppingCart", "path": "/sales" },
+        { "title": "Purchase", "icon": "Truck", "path": "/purchase" }
+      ],
+      "widgets": [],
+      "permissions": {}
+    },
+    "ADMIN": {
+      "sidebar_links": [
+        { "title": "Dashboard", "icon": "LayoutDashboard", "path": "/dashboard" },
+        { "title": "Inventory", "icon": "Package", "path": "/inventory" },
+        { "title": "Sales", "icon": "ShoppingCart", "path": "/sales" },
+        { "title": "Purchase", "icon": "Truck", "path": "/purchase" },
+        { "title": "Finance", "icon": "TrendingUp", "path": "/finance" },
+        { "title": "HR", "icon": "Briefcase", "path": "/hr" },
+        { "title": "CRM", "icon": "Users", "path": "/crm" },
+        { "title": "Users", "icon": "UserCircle", "path": "/users" }
+      ],
+      "widgets": [],
+      "permissions": {
+        "is_admin": true
+      }
+    }
+  }
+}
