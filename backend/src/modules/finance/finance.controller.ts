@@ -35,7 +35,7 @@ export class FinanceController {
   }
 
   @Post('transactions')
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.CFO)
   @ApiOperation({ summary: 'Create a double-entry accounting transaction' })
   createTransaction(@CurrentUser() user: any, @Body() dto: CreateTransactionDto) {
     return this.financeService.createTransaction(user.companyId, dto);
@@ -74,7 +74,7 @@ export class FinanceController {
   }
 
   @Post('invoices/:id/pay')
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.CFO)
   @ApiOperation({ summary: 'Record payment for an invoice' })
   recordPayment(
     @CurrentUser() user: any,

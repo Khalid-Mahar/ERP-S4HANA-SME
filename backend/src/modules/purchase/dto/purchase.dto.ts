@@ -34,6 +34,19 @@ export class CreatePurchaseOrderDto {
   lines: PurchaseOrderLineDto[];
 }
 
+export class UpdatePurchaseOrderDto {
+  @ApiPropertyOptional() @IsOptional() @IsUUID() vendorId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() expectedDate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+
+  @ApiPropertyOptional({ type: [PurchaseOrderLineDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PurchaseOrderLineDto)
+  lines?: PurchaseOrderLineDto[];
+}
+
 export class GoodsReceiptDto {
   @ApiProperty() @IsUUID() warehouseId: string;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;

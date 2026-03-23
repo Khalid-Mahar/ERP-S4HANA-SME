@@ -1,9 +1,9 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PurchaseService } from './purchase.service';
 import {
   CreateVendorDto, UpdateVendorDto,
-  CreatePurchaseOrderDto, GoodsReceiptDto,
+  CreatePurchaseOrderDto, UpdatePurchaseOrderDto, GoodsReceiptDto, UpdatePurchaseOrderStatusDto,
 } from './dto/purchase.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -18,6 +18,13 @@ import { Role } from '@prisma/client';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PurchaseController {
   constructor(private readonly purchaseService: PurchaseService) {}
+
+  @Get('kpi/pending-pos')
+  @Roles(Role.ADMIN, Role.MANAGER, Role.CFO, Role.WAREHOUSE_HEAD)
+  @ApiOperation({ summary: 'Pending purchase orders count' })
+  getPendingPos(@CurrentUser() user: any) {
+    return this.purchaseService.getPendingPosKpi(user.companyId);
+  }
 
   @Post('vendors')
   @Roles(Role.MANAGER, Role.ADMIN)
@@ -58,10 +65,24 @@ export class PurchaseController {
     return this.purchaseService.findPurchaseOrderById(user.companyId, id);
   }
 
+  @Put('orders/:id')
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @ApiOperation({ summary: 'Edit a purchase order (allowed before RECEIVED)' })
+  updateOrder(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: UpdatePurchaseOrderDto) {
+    return this.purchaseService.updatePurchaseOrder(user.companyId, user.id, id, dto);
+  }
+
+  @Patch('orders/:id/status')
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @ApiOperation({ summary: 'Update purchase order status' })
+  updateStatus(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: UpdatePurchaseOrderStatusDto) {
+    return this.purchaseService.updateOrderStatus(user.companyId, user.id, id, dto);
+  }
+
   @Post('orders/:id/receive')
   @Roles(Role.MANAGER, Role.ADMIN)
   @ApiOperation({ summary: 'Receive goods against a purchase order (increases stock)' })
   receiveGoods(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: GoodsReceiptDto) {
-    return this.purchaseService.receiveGoods(user.companyId, id, dto);
+    return this.purchaseService.receiveGoods(user.companyId, user.id, id, dto);
   }
 }

@@ -15,11 +15,17 @@ export default function SalesOrdersPage() {
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState<'day' | 'month' | 'year' | ''>('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [shipModalOpen, setShipModalOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [manageModalOpen, setManageModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [form, setForm] = useState({ ...EMPTY_ORDER });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ ...EMPTY_ORDER });
   const [manageForm, setManageForm] = useState({ status: '', warehouseId: '' });
+  const [shipNotes, setShipNotes] = useState('');
+  const [shipLines, setShipLines] = useState<Array<{ salesOrderLineId: string; quantity: number }>>([]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['sales-orders', page, search, period],
@@ -56,10 +62,27 @@ export default function SalesOrdersPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Error updating status'),
   });
 
-  const handleManage = (order: any) => {
-    setSelectedOrder(order);
-    setManageForm({ status: order.status, warehouseId: '' });
-    setManageModalOpen(true);
+  const shipMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => salesApi.shipOrder(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales-orders'] });
+      setShipModalOpen(false);
+      setManageModalOpen(false);
+      toast.success('Shipment created');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Error creating shipment'),
+  });
+
+  const handleManage = async (order: any) => {
+    try {
+      const full = await salesApi.getOrder(order.id);
+      const o = (full as any)?.data;
+      setSelectedOrder(o);
+      setManageForm({ status: o.status, warehouseId: '' });
+      setManageModalOpen(true);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Failed to load order');
+    }
   };
 
   const { data: customersResult } = useQuery({
@@ -86,6 +109,17 @@ export default function SalesOrdersPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Error creating order'),
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => salesApi.updateOrder(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sales-orders'] });
+      setEditModalOpen(false);
+      setEditId(null);
+      toast.success('Sales Order updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Error updating order'),
+  });
+
   const addLine = () => setForm({ ...form, lines: [...form.lines, { itemId: '', quantity: 1, unitPrice: 0, discount: 0 }] });
   const removeLine = (idx: number) => setForm({ ...form, lines: form.lines.filter((_, i) => i !== idx) });
   const updateLine = (idx: number, field: string, value: any) => {
@@ -99,8 +133,80 @@ export default function SalesOrdersPage() {
     setForm({ ...form, lines });
   };
 
+  const addEditLine = () => setEditForm({ ...editForm, lines: [...editForm.lines, { itemId: '', quantity: 1, unitPrice: 0, discount: 0 }] });
+  const removeEditLine = (idx: number) => setEditForm({ ...editForm, lines: editForm.lines.filter((_, i) => i !== idx) });
+  const updateEditLine = (idx: number, field: string, value: any) => {
+    const lines = [...editForm.lines];
+    lines[idx] = { ...lines[idx], [field]: value };
+    if (field === 'itemId') {
+      const item = items.find((i: any) => i.id === value);
+      if (item) lines[idx].unitPrice = Number(item.basePrice);
+    }
+    setEditForm({ ...editForm, lines });
+  };
+
+  const handleEdit = async (r: any) => {
+    try {
+      const full = await salesApi.getOrder(r.id);
+      const o = (full as any)?.data;
+      setEditId(o.id);
+      setEditForm({
+        customerId: o.customerId,
+        deliveryDate: o.deliveryDate ? String(o.deliveryDate).slice(0, 10) : '',
+        notes: o.notes || '',
+        lines: (o.lines || []).map((l: any) => ({
+          itemId: l.itemId,
+          quantity: Number(l.quantity),
+          unitPrice: Number(l.unitPrice),
+          discount: Number(l.discount || 0),
+        })),
+      });
+      setEditModalOpen(true);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Failed to load order');
+    }
+  };
+
   const orders = (data as any)?.data || [];
   const meta = (data as any)?.meta || { total: 0 };
+  const allowedNextStatuses: Record<string, string[]> = {
+    DRAFT: ['CONFIRMED', 'PENDING_APPROVAL', 'CANCELLED'],
+    PENDING_APPROVAL: ['CONFIRMED', 'CANCELLED', 'DRAFT'],
+    CONFIRMED: ['PICKING', 'SHIPPED', 'CANCELLED'],
+    PICKING: ['SHIPPED', 'CANCELLED'],
+    PARTIALLY_SHIPPED: ['SHIPPED', 'CANCELLED'],
+    SHIPPED: ['DELIVERED'],
+    DELIVERED: [],
+    CANCELLED: [],
+  };
+
+  const statusOptions = (current: string) => {
+    const next = allowedNextStatuses[current] || [];
+    return [current, ...next.filter((s) => s !== current)];
+  };
+
+  const shippedQtyForLine = (lineId: string) => {
+    const rows = selectedOrder?.reservations || [];
+    return rows
+      .filter((r: any) => r.salesOrderLineId === lineId && r.status === 'SHIPPED')
+      .reduce((s: number, r: any) => s + Number(r.quantity), 0);
+  };
+
+  const remainingQtyForLine = (line: any) => {
+    const shipped = shippedQtyForLine(line.id);
+    return Math.max(0, Number(line.quantity) - shipped);
+  };
+
+  const openPartialShip = () => {
+    if (!selectedOrder) return;
+    const lines = (selectedOrder.lines || []).map((l: any) => ({
+      salesOrderLineId: l.id,
+      quantity: remainingQtyForLine(l),
+    }));
+    setShipLines(lines);
+    setShipNotes('');
+    setShipModalOpen(true);
+  };
 
   const columns = [
     { 
@@ -134,7 +240,10 @@ export default function SalesOrdersPage() {
       render: (r: any) => {
         const colors: any = {
           DRAFT: 'badge-default',
+          PENDING_APPROVAL: 'badge-warning',
           CONFIRMED: 'badge-info',
+          PICKING: 'badge-info',
+          PARTIALLY_SHIPPED: 'badge-warning',
           SHIPPED: 'badge-warning',
           DELIVERED: 'badge-success',
           CANCELLED: 'badge-danger'
@@ -145,14 +254,23 @@ export default function SalesOrdersPage() {
     {
       key: 'actions',
       header: '',
-      width: '120px',
+      width: '180px',
       render: (r: any) => (
-        <button 
-          onClick={() => handleManage(r)}
-          className="flex items-center gap-1 text-[#4f46e5] font-black text-[11px] uppercase tracking-wider hover:underline"
-        >
-          Manage Order <ArrowRight size={14} />
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => handleEdit(r)}
+            disabled={['SHIPPED', 'DELIVERED', 'CANCELLED'].includes(r.status)}
+            className="text-[#0f172a] font-black text-[11px] uppercase tracking-wider hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Edit
+          </button>
+          <button 
+            onClick={() => handleManage(r)}
+            className="flex items-center gap-1 text-[#4f46e5] font-black text-[11px] uppercase tracking-wider hover:underline"
+          >
+            Manage <ArrowRight size={14} />
+          </button>
+        </div>
       )
     }
   ];
@@ -312,6 +430,120 @@ export default function SalesOrdersPage() {
         </div>
       </Modal>
 
+      <Modal
+        open={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        title="Edit Sales Order"
+        size="lg"
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setEditModalOpen(false)}>Cancel</button>
+            <button
+              className="btn btn-primary"
+              onClick={() => editId && updateMutation.mutate({ id: editId, data: editForm })}
+              disabled={updateMutation.isPending || !editForm.customerId || editForm.lines.some(l => !l.itemId)}
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Customer</label>
+              <select
+                className="form-input"
+                value={editForm.customerId}
+                onChange={(e) => setEditForm({ ...editForm, customerId: e.target.value })}
+              >
+                <option value="">Select Customer</option>
+                {customers.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Delivery Date</label>
+              <input
+                type="date"
+                className="form-input"
+                value={editForm.deliveryDate}
+                onChange={(e) => setEditForm({ ...editForm, deliveryDate: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-[#e2e8f0] pb-2">
+              <h3 className="text-sm font-black text-[#0f172a] uppercase tracking-wider">Order Lines</h3>
+              <button className="text-xs font-black text-[#4f46e5] hover:underline" onClick={addEditLine}>+ Add Line</button>
+            </div>
+            <div className="space-y-3">
+              {editForm.lines.map((line, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-3 items-end bg-gray-50/50 p-3 rounded-xl border border-[#f1f5f9]">
+                  <div className="col-span-5 space-y-1">
+                    <label className="text-[10px] font-bold text-[#94a3b8] uppercase">Item</label>
+                    <select
+                      className="form-input !text-xs"
+                      value={line.itemId}
+                      onChange={(e) => updateEditLine(idx, 'itemId', e.target.value)}
+                    >
+                      <option value="">Select Item</option>
+                      {items.map((i: any) => (
+                        <option key={i.id} value={i.id}>{i.name} ({i.sku})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <label className="text-[10px] font-bold text-[#94a3b8] uppercase">Qty</label>
+                    <input
+                      type="number"
+                      className="form-input !text-xs"
+                      value={line.quantity}
+                      onChange={(e) => updateEditLine(idx, 'quantity', Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <label className="text-[10px] font-bold text-[#94a3b8] uppercase">Price</label>
+                    <input
+                      type="number"
+                      className="form-input !text-xs"
+                      value={line.unitPrice}
+                      onChange={(e) => updateEditLine(idx, 'unitPrice', Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <label className="text-[10px] font-bold text-[#94a3b8] uppercase">Disc%</label>
+                    <input
+                      type="number"
+                      className="form-input !text-xs"
+                      value={line.discount}
+                      onChange={(e) => updateEditLine(idx, 'discount', Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="col-span-1 pb-2 flex justify-center">
+                    <button className="text-red-400 hover:text-red-600" onClick={() => removeEditLine(idx)}>
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Internal Notes</label>
+            <textarea
+              className="form-input min-h-[80px]"
+              value={editForm.notes}
+              onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+              placeholder="Shipping instructions, etc..."
+            />
+          </div>
+        </div>
+      </Modal>
+
       {/* Manage Order Modal */}
       <Modal
         open={manageModalOpen}
@@ -320,10 +552,13 @@ export default function SalesOrdersPage() {
         footer={
           <>
             <button className="btn btn-secondary" onClick={() => setManageModalOpen(false)}>Close</button>
+            {selectedOrder && ['CONFIRMED', 'PICKING', 'PARTIALLY_SHIPPED'].includes(selectedOrder.status) && (
+              <button className="btn btn-secondary" onClick={openPartialShip}>Partial Ship</button>
+            )}
             <button 
               className="btn btn-primary" 
               onClick={() => statusMutation.mutate({ id: selectedOrder.id, data: manageForm })}
-              disabled={statusMutation.isPending || !manageForm.status || ((manageForm.status === 'SHIPPED' || manageForm.status === 'DELIVERED') && !manageForm.warehouseId)}
+              disabled={statusMutation.isPending || !manageForm.status}
             >
               Update Status
             </button>
@@ -336,6 +571,10 @@ export default function SalesOrdersPage() {
               <div>
                 <p className="text-[10px] font-bold text-[#64748b] uppercase">Current Status</p>
                 <span className="badge badge-info">{selectedOrder.status}</span>
+                <p className="mt-1 text-xs font-bold text-[#0f172a]">{selectedOrder.customer?.name}</p>
+                <p className="text-[10px] font-bold text-[#64748b] uppercase">
+                  Delivery: {selectedOrder.deliveryDate ? new Date(selectedOrder.deliveryDate).toLocaleDateString() : '—'}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-bold text-[#64748b] uppercase">Total Amount</p>
@@ -351,15 +590,15 @@ export default function SalesOrdersPage() {
                   value={manageForm.status}
                   onChange={(e) => setManageForm({ ...manageForm, status: e.target.value })}
                 >
-                  <option value="DRAFT">DRAFT</option>
-                  <option value="CONFIRMED">CONFIRMED</option>
-                  <option value="SHIPPED">SHIPPED (Reduces Stock)</option>
-                  <option value="DELIVERED">DELIVERED</option>
-                  <option value="CANCELLED">CANCELLED</option>
+                  {statusOptions(selectedOrder.status).map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {(manageForm.status === 'SHIPPED' || manageForm.status === 'DELIVERED') && (
+              {(manageForm.status === 'CONFIRMED') && (
                 <div className="space-y-1 animate-in fade-in slide-in-from-top-2">
                   <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Dispatch Warehouse</label>
                   <select 
@@ -367,12 +606,14 @@ export default function SalesOrdersPage() {
                     value={manageForm.warehouseId}
                     onChange={(e) => setManageForm({ ...manageForm, warehouseId: e.target.value })}
                   >
-                    <option value="">Select Warehouse to Ship From</option>
+                    <option value="">Select Warehouse</option>
                     {warehouses.map((w: any) => (
                       <option key={w.id} value={w.id}>{w.name}</option>
                     ))}
                   </select>
-                  <p className="text-[10px] text-orange-600 font-bold uppercase italic">* Inventory will be deducted from this warehouse</p>
+                  <p className="text-[10px] text-orange-600 font-bold uppercase italic">
+                    * Inventory will be reserved in this warehouse (system can auto-split across warehouses if needed)
+                  </p>
                 </div>
               )}
             </div>
@@ -382,8 +623,71 @@ export default function SalesOrdersPage() {
               <div className="space-y-2">
                 {selectedOrder.lines?.map((line: any, i: number) => (
                   <div key={i} className="flex justify-between items-center text-xs py-1">
-                    <span className="font-bold text-[#0f172a]">{line.item?.name} x {line.quantity}</span>
+                    <span className="font-bold text-[#0f172a]">
+                      {line.item?.name} x {Number(line.quantity)} (shipped {shippedQtyForLine(line.id)}, remaining {remainingQtyForLine(line)})
+                    </span>
                     <span className="font-black text-[#64748b]">${Number(line.lineTotal).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={shipModalOpen}
+        onClose={() => setShipModalOpen(false)}
+        title={`Create Shipment: ${selectedOrder?.orderNumber}`}
+        size="lg"
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setShipModalOpen(false)}>Cancel</button>
+            <button
+              className="btn btn-primary"
+              onClick={() => selectedOrder && shipMutation.mutate({ id: selectedOrder.id, data: { notes: shipNotes, lines: shipLines.filter(l => Number(l.quantity) > 0) } })}
+              disabled={shipMutation.isPending || !selectedOrder}
+            >
+              {shipMutation.isPending ? 'Shipping...' : 'Create Shipment'}
+            </button>
+          </>
+        }
+      >
+        {selectedOrder && (
+          <div className="space-y-6">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Shipment Notes</label>
+              <textarea
+                className="form-input min-h-[80px]"
+                value={shipNotes}
+                onChange={(e) => setShipNotes(e.target.value)}
+                placeholder="Driver details, packing notes, etc..."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-bold text-[#64748b] uppercase tracking-widest border-b border-[#f1f5f9] pb-1">Quantities to Ship</h4>
+              <div className="space-y-3">
+                {(selectedOrder.lines || []).map((line: any, idx: number) => (
+                  <div key={line.id} className="grid grid-cols-12 gap-3 items-end bg-gray-50/50 p-3 rounded-xl border border-[#f1f5f9]">
+                    <div className="col-span-8">
+                      <p className="text-xs font-black text-[#0f172a]">{line.item?.name}</p>
+                      <p className="text-[10px] font-bold text-[#64748b] uppercase">
+                        Remaining: {remainingQtyForLine(line)}
+                      </p>
+                    </div>
+                    <div className="col-span-4 space-y-1">
+                      <label className="text-[10px] font-bold text-[#94a3b8] uppercase">Ship Qty</label>
+                      <input
+                        type="number"
+                        className="form-input !text-xs"
+                        value={shipLines.find(l => l.salesOrderLineId === line.id)?.quantity ?? 0}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          setShipLines((prev) => prev.map((p) => p.salesOrderLineId === line.id ? { ...p, quantity: v } : p));
+                        }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>

@@ -79,7 +79,7 @@ export default function LeadsPage() {
       width: '120px',
       render: (r: any) => (
         <button 
-          onClick={() => toast.info(`Progressing lead: ${r.name}`)}
+          onClick={() => toast(`Progressing lead: ${r.name}`)}
           className="text-[#4f46e5] font-black text-[11px] uppercase tracking-wider hover:underline flex items-center gap-1"
         >
           <TrendingUp size={12} /> Progress Lead

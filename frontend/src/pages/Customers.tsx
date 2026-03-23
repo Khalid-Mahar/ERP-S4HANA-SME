@@ -69,7 +69,7 @@ export default function CustomersPage() {
       width: '120px',
       render: (r: any) => (
         <button 
-          onClick={() => toast.info(`Viewing history for ${r.name}`)}
+          onClick={() => toast(`Viewing history for ${r.name}`)}
           className="text-[#4f46e5] font-black text-[11px] uppercase tracking-wider hover:underline"
         >
           View History

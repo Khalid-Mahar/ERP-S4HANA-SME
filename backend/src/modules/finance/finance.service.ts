@@ -1,60 +1,18 @@
 import {
   Injectable, NotFoundException, BadRequestException, Logger,
 } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../common/prisma.service';
 import { PaginationDto, PaginatedResult } from '../../common/dto/pagination.dto';
 import {
   CreateAccountDto, UpdateAccountDto,
   CreateTransactionDto, FinancialReportDto,
 } from './dto/finance.dto';
-import { SalesOrderShippedEvent } from '../../common/events/sales-order-shipped.event';
 
 @Injectable()
 export class FinanceService {
   private readonly logger = new Logger(FinanceService.name);
 
   constructor(private prisma: PrismaService) {}
-
-  @OnEvent('sales.order.shipped')
-  async handleSalesOrderShipped(event: SalesOrderShippedEvent) {
-    this.logger.log(`Processing ledger entry for Sales Order: ${event.orderId}`);
-    
-    const order = await this.prisma.salesOrder.findUnique({
-      where: { id: event.orderId },
-      include: { lines: true },
-    });
-
-    if (!order) return;
-
-    const [arAccount, revAccount] = await Promise.all([
-      this.prisma.account.findFirst({ where: { companyId: event.companyId, code: '1200' } }),
-      this.prisma.account.findFirst({ where: { companyId: event.companyId, code: '4000' } }),
-    ]);
-
-    if (!arAccount || !revAccount) {
-      this.logger.error('AR or Revenue account not found, skipping ledger entry');
-      return;
-    }
-
-    await this.prisma.transaction.create({
-      data: {
-        companyId: event.companyId,
-        transactionDate: new Date(),
-        description: `Auto-Post: Sales Order ${order.orderNumber} Shipped`,
-        referenceType: 'SALES_ORDER',
-        referenceId: order.id,
-        totalAmount: order.totalAmount,
-        status: 'POSTED',
-        lines: {
-          create: [
-            { debitAccountId: arAccount.id, amount: order.totalAmount },
-            { creditAccountId: revAccount.id, amount: order.totalAmount },
-          ],
-        },
-      },
-    });
-  }
 
   // ── Chart of Accounts ──────────────────────────────────────────
 

@@ -55,7 +55,9 @@ export const salesApi = {
   getOrders: (params?: PaginationParams) => api.get<PaginatedResponse<any>>('/sales/orders', params),
   getOrder: (id: string) => api.get<any>(`/sales/orders/${id}`),
   createOrder: (data: any) => api.post<any>('/sales/orders', data),
+  updateOrder: (id: string, data: any) => api.put<any>(`/sales/orders/${id}`, data),
   updateOrderStatus: (id: string, data: { status: string; warehouseId?: string }) => api.patch<any>(`/sales/orders/${id}/status`, data),
+  shipOrder: (id: string, data?: any) => api.post<any>(`/sales/orders/${id}/ship`, data),
   getSummary: () => api.get<any>('/sales/orders/summary'),
 };
 
@@ -67,6 +69,8 @@ export const purchaseApi = {
   getOrders: (params?: PaginationParams) => api.get<PaginatedResponse<any>>('/purchase/orders', params),
   getOrder: (id: string) => api.get<any>(`/purchase/orders/${id}`),
   createOrder: (data: any) => api.post<any>('/purchase/orders', data),
+  updateOrder: (id: string, data: any) => api.put<any>(`/purchase/orders/${id}`, data),
+  updateOrderStatus: (id: string, status: string) => api.patch<any>(`/purchase/orders/${id}/status`, { status }),
   receiveGoods: (poId: string, data: { warehouseId: string; notes?: string }) => api.post<any>(`/purchase/orders/${poId}/receive`, data),
 };
 

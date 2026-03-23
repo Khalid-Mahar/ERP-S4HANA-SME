@@ -14,7 +14,6 @@ import {
   StockMovementDto,
   AdjustStockDto,
 } from './dto/inventory.dto';
-import { SalesOrderShippedEvent } from '../../common/events/sales-order-shipped.event';
 import { CostingService } from './costing.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -28,29 +27,25 @@ export class InventoryService {
     private auditService: AuditService,
   ) {}
 
-  @OnEvent('sales.order.shipped')
-  async handleSalesOrderShipped(event: SalesOrderShippedEvent) {
-    this.logger.log(`Processing stock deduction for Sales Order: ${event.orderId}`);
-    
-    const order = await this.prisma.salesOrder.findUnique({
-      where: { id: event.orderId },
-      include: { lines: true },
+  @OnEvent('inventory.low_stock')
+  async handleLowStock(event: {
+    companyId: string;
+    itemId: string;
+    warehouseId: string;
+    availableQty: number;
+    minStockLevel: number;
+    source: string;
+  }) {
+    await this.auditService.log({
+      companyId: event.companyId,
+      action: 'LOW_STOCK',
+      module: 'INVENTORY',
+      resourceId: event.itemId,
+      newValue: event,
     });
-
-    if (!order) return;
-
-    await this.prisma.$transaction(async (tx) => {
-      for (const line of order.lines) {
-        await this.recordStockMovementTx(tx, event.companyId, {
-          itemId: line.itemId,
-          fromWarehouseId: event.warehouseId,
-          quantity: Number(line.quantity),
-          movementType: 'OUT',
-          referenceType: 'SALES_ORDER',
-          referenceId: order.id,
-        });
-      }
-    });
+    this.logger.warn(
+      `Low stock: item=${event.itemId} wh=${event.warehouseId} available=${event.availableQty} min=${event.minStockLevel} source=${event.source}`,
+    );
   }
 
   private async recordStockMovementTx(tx: any, companyId: string, dto: any) {
@@ -366,6 +361,37 @@ export class InventoryService {
         return { ...item, totalStock };
       })
       .filter((item) => item.totalStock <= item.minStockLevel);
+  }
+
+  async getInventoryStatusBreakdown(companyId: string) {
+    const items = await this.prisma.item.findMany({
+      where: { companyId, isActive: true },
+      select: { id: true, minStockLevel: true, stockLevels: { select: { quantity: true } } },
+    });
+
+    let criticalLow = 0;
+    let reorderSoon = 0;
+    let inStock = 0;
+
+    for (const item of items) {
+      const totalStock = item.stockLevels.reduce((s, sl) => s + Number(sl.quantity), 0);
+      const min = Number(item.minStockLevel || 0);
+      if (min <= 0) {
+        inStock += 1;
+        continue;
+      }
+      if (totalStock <= min) criticalLow += 1;
+      else if (totalStock <= Math.ceil(min * 1.5)) reorderSoon += 1;
+      else inStock += 1;
+    }
+
+    const total = items.length;
+    return {
+      total,
+      criticalLow,
+      reorderSoon,
+      inStock,
+    };
   }
 
   // ── Private helpers ────────────────────────────────────────────

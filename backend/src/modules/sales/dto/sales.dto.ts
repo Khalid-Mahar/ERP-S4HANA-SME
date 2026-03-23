@@ -37,13 +37,52 @@ export class CreateSalesOrderDto {
   lines: SalesOrderLineDto[];
 }
 
+export class UpdateSalesOrderDto {
+  @ApiPropertyOptional() @IsOptional() @IsUUID() customerId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() deliveryDate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+
+  @ApiPropertyOptional({ type: [SalesOrderLineDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SalesOrderLineDto)
+  lines?: SalesOrderLineDto[];
+
+  @ApiPropertyOptional({ description: 'Optional preferred warehouse for re-reservation' })
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
+}
+
+export class ShipSalesOrderLineDto {
+  @ApiProperty() @IsUUID() salesOrderLineId: string;
+  @ApiProperty() @IsNumber() @Min(0.0001) @Type(() => Number) quantity: number;
+}
+
+export class ShipSalesOrderDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+
+  @ApiPropertyOptional({ type: [ShipSalesOrderLineDto], description: 'If omitted, ships all remaining reserved quantities' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ShipSalesOrderLineDto)
+  lines?: ShipSalesOrderLineDto[];
+}
+
 export class UpdateSalesOrderStatusDto {
   @ApiProperty({ enum: SalesOrderStatus })
   @IsEnum(SalesOrderStatus)
   status: SalesOrderStatus;
 
-  @ApiPropertyOptional({ description: 'Required when status is SHIPPED or DELIVERED' })
+  @ApiPropertyOptional({ description: 'Optional: preferred warehouse for reservation' })
   @IsOptional()
   @IsUUID()
   warehouseId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }

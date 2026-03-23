@@ -15,10 +15,13 @@ export default function PurchaseOrdersPage() {
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState<'day' | 'month' | 'year' | ''>('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [receiveModalOpen, setReceiveModalOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [form, setForm] = useState({ ...EMPTY_ORDER });
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ ...EMPTY_ORDER });
   const [receiveForm, setReceiveForm] = useState({ warehouseId: '', notes: '' });
 
   const { data, isLoading } = useQuery({
@@ -39,6 +42,15 @@ export default function PurchaseOrdersPage() {
 
   const warehouses = (warehousesResult as any)?.data || [];
 
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => purchaseApi.updateOrderStatus(id, status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      toast.success('Order status updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Error updating status'),
+  });
+
   const receiveMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => purchaseApi.receiveGoods(id, data),
     onSuccess: () => {
@@ -49,10 +61,16 @@ export default function PurchaseOrdersPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Error receiving goods'),
   });
 
-  const handleReceive = (order: any) => {
-    setSelectedOrder(order);
-    setReceiveForm({ warehouseId: '', notes: '' });
-    setReceiveModalOpen(true);
+  const handleReceive = async (order: any) => {
+    try {
+      const full = await purchaseApi.getOrder(order.id);
+      const o = (full as any)?.data;
+      setSelectedOrder(o);
+      setReceiveForm({ warehouseId: '', notes: '' });
+      setReceiveModalOpen(true);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Failed to load order');
+    }
   };
 
   const { data: vendorsResult } = useQuery({
@@ -79,6 +97,17 @@ export default function PurchaseOrdersPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Error creating order'),
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => purchaseApi.updateOrder(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      setEditModalOpen(false);
+      setEditId(null);
+      toast.success('Purchase Order updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Error updating order'),
+  });
+
   const addLine = () => setForm({ ...form, lines: [...form.lines, { itemId: '', quantity: 1, unitCost: 0 }] });
   const removeLine = (idx: number) => setForm({ ...form, lines: form.lines.filter((_, i) => i !== idx) });
   const updateLine = (idx: number, field: string, value: any) => {
@@ -91,6 +120,39 @@ export default function PurchaseOrdersPage() {
       if (item) lines[idx].unitCost = Number(item.lastPurchasePrice || 0);
     }
     setForm({ ...form, lines });
+  };
+
+  const addEditLine = () => setEditForm({ ...editForm, lines: [...editForm.lines, { itemId: '', quantity: 1, unitCost: 0 }] });
+  const removeEditLine = (idx: number) => setEditForm({ ...editForm, lines: editForm.lines.filter((_, i) => i !== idx) });
+  const updateEditLine = (idx: number, field: string, value: any) => {
+    const lines = [...editForm.lines];
+    lines[idx] = { ...lines[idx], [field]: value };
+    if (field === 'itemId') {
+      const item = items.find((i: any) => i.id === value);
+      if (item) lines[idx].unitCost = Number(item.lastPurchasePrice || 0);
+    }
+    setEditForm({ ...editForm, lines });
+  };
+
+  const handleEdit = async (r: any) => {
+    try {
+      const full = await purchaseApi.getOrder(r.id);
+      const o = (full as any)?.data;
+      setEditId(o.id);
+      setEditForm({
+        vendorId: o.vendorId,
+        expectedDate: o.expectedDate ? String(o.expectedDate).slice(0, 10) : '',
+        notes: o.notes || '',
+        lines: (o.lines || []).map((l: any) => ({
+          itemId: l.itemId,
+          quantity: Number(l.quantity),
+          unitCost: Number(l.unitCost),
+        })),
+      });
+      setEditModalOpen(true);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Failed to load order');
+    }
   };
 
   const orders = (data as any)?.data || [];
@@ -128,6 +190,7 @@ export default function PurchaseOrdersPage() {
       render: (r: any) => {
         const colors: any = {
           DRAFT: 'badge-default',
+          PENDING_APPROVAL: 'badge-warning',
           SENT: 'badge-info',
           CONFIRMED: 'badge-info',
           PARTIALLY_RECEIVED: 'badge-warning',
@@ -140,15 +203,33 @@ export default function PurchaseOrdersPage() {
     {
       key: 'actions',
       header: '',
-      width: '120px',
+      width: '240px',
       render: (r: any) => (
-        <button 
-          onClick={() => handleReceive(r)}
-          disabled={r.status === 'RECEIVED'}
-          className="flex items-center gap-1 text-[#4f46e5] font-black text-[11px] uppercase tracking-wider hover:underline disabled:opacity-30"
-        >
-          Receive Goods <ArrowRight size={14} />
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => handleEdit(r)}
+            disabled={['RECEIVED', 'PARTIALLY_RECEIVED', 'CANCELLED'].includes(r.status)}
+            className="text-[#0f172a] font-black text-[11px] uppercase tracking-wider hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Edit
+          </button>
+          {r.status === 'DRAFT' && (
+            <button 
+              onClick={() => statusMutation.mutate({ id: r.id, status: 'CONFIRMED' })}
+              disabled={statusMutation.isPending}
+              className="text-[#10b981] font-black text-[11px] uppercase tracking-wider hover:underline"
+            >
+              Confirm
+            </button>
+          )}
+          <button 
+            onClick={() => handleReceive(r)}
+            disabled={!['CONFIRMED', 'PARTIALLY_RECEIVED'].includes(r.status)}
+            className="flex items-center gap-1 text-[#4f46e5] font-black text-[11px] uppercase tracking-wider hover:underline disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Receive <ArrowRight size={14} />
+          </button>
+        </div>
       )
     }
   ];
@@ -293,6 +374,111 @@ export default function PurchaseOrdersPage() {
               className="form-input min-h-[80px]" 
               value={form.notes} 
               onChange={(e) => setForm({ ...form, notes: e.target.value })} 
+              placeholder="Delivery instructions, quality requirements, etc..."
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        title="Edit Purchase Order"
+        size="lg"
+        footer={
+          <>
+            <button className="btn btn-secondary" onClick={() => setEditModalOpen(false)}>Cancel</button>
+            <button
+              className="btn btn-primary"
+              onClick={() => editId && updateMutation.mutate({ id: editId, data: editForm })}
+              disabled={updateMutation.isPending || !editForm.vendorId || editForm.lines.some(l => !l.itemId)}
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Vendor / Supplier</label>
+              <select
+                className="form-input"
+                value={editForm.vendorId}
+                onChange={(e) => setEditForm({ ...editForm, vendorId: e.target.value })}
+              >
+                <option value="">Select Vendor</option>
+                {vendors.map((v: any) => (
+                  <option key={v.id} value={v.id}>{v.name} ({v.code})</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Expected Date</label>
+              <input
+                type="date"
+                className="form-input"
+                value={editForm.expectedDate}
+                onChange={(e) => setEditForm({ ...editForm, expectedDate: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between border-b border-[#e2e8f0] pb-2">
+              <h3 className="text-sm font-black text-[#0f172a] uppercase tracking-wider">Order Lines</h3>
+              <button className="text-xs font-black text-[#4f46e5] hover:underline" onClick={addEditLine}>+ Add Line</button>
+            </div>
+            <div className="space-y-3">
+              {editForm.lines.map((line, idx) => (
+                <div key={idx} className="grid grid-cols-12 gap-3 items-end bg-gray-50/50 p-3 rounded-xl border border-[#f1f5f9]">
+                  <div className="col-span-6 space-y-1">
+                    <label className="text-[10px] font-bold text-[#94a3b8] uppercase">Item</label>
+                    <select
+                      className="form-input !text-xs"
+                      value={line.itemId}
+                      onChange={(e) => updateEditLine(idx, 'itemId', e.target.value)}
+                    >
+                      <option value="">Select Item</option>
+                      {items.map((i: any) => (
+                        <option key={i.id} value={i.id}>{i.name} ({i.sku})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <label className="text-[10px] font-bold text-[#94a3b8] uppercase">Qty</label>
+                    <input
+                      type="number"
+                      className="form-input !text-xs"
+                      value={line.quantity}
+                      onChange={(e) => updateEditLine(idx, 'quantity', Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="col-span-3 space-y-1">
+                    <label className="text-[10px] font-bold text-[#94a3b8] uppercase">Unit Cost</label>
+                    <input
+                      type="number"
+                      className="form-input !text-xs"
+                      value={line.unitCost}
+                      onChange={(e) => updateEditLine(idx, 'unitCost', Number(e.target.value))}
+                    />
+                  </div>
+                  <div className="col-span-1 pb-2 flex justify-center">
+                    <button className="text-red-400 hover:text-red-600" onClick={() => removeEditLine(idx)}>
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-[#64748b] uppercase tracking-wider">Internal Notes</label>
+            <textarea
+              className="form-input min-h-[80px]"
+              value={editForm.notes}
+              onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
               placeholder="Delivery instructions, quality requirements, etc..."
             />
           </div>

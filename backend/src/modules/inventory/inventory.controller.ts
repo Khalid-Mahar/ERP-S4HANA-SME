@@ -36,7 +36,7 @@ export class InventoryController {
   ) {}
 
   @Get('valuation')
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.CFO)
   @ApiOperation({ summary: 'Get total inventory valuation (FIFO)' })
   getValuation(@CurrentUser() user: any) {
     return this.costingService.getInventoryValuation(user.companyId);
@@ -59,6 +59,13 @@ export class InventoryController {
   @ApiOperation({ summary: 'Get items with stock below minimum level' })
   getLowStock(@CurrentUser() user: any) {
     return this.inventoryService.getLowStockItems(user.companyId);
+  }
+
+  @Get('kpi/status-breakdown')
+  @Roles(Role.ADMIN, Role.MANAGER, Role.CFO, Role.WAREHOUSE_HEAD)
+  @ApiOperation({ summary: 'Inventory status breakdown for dashboard' })
+  getStatusBreakdown(@CurrentUser() user: any) {
+    return this.inventoryService.getInventoryStatusBreakdown(user.companyId);
   }
 
   @Get('items/:id')

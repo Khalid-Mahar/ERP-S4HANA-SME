@@ -85,7 +85,7 @@ export default function EmployeesPage() {
       width: '100px',
       render: (r: any) => (
         <button 
-          onClick={() => toast.info(`Managing HR for ${r.firstName}`)}
+          onClick={() => toast(`Managing HR for ${r.firstName}`)}
           className="text-[#4f46e5] font-black text-[11px] uppercase tracking-wider hover:underline"
         >
           Manage HR
