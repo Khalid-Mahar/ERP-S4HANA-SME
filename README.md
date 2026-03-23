@@ -47,3 +47,9 @@ npm run dev
 2. **Sales/Purchase Integration:** Update `InventoryService` to automatically adjust stock when orders are completed.
 3. **Finance:** Create a `TransactionService` that listens to events from Sales and Purchase modules to record entries.
 4. **Reports:** Add a reporting service for real-time analytics.
+
+For Git Push 
+git pull origin main
+git add .
+git commit -m "your message"
+git push origin main
